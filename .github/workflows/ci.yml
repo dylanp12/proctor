@@ -1,0 +1,23 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: host deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libseccomp-dev
+          # ubuntu 24.04 restricts unprivileged userns via apparmor; proctor's
+          # sandbox tests need it (they self-skip if unavailable, but CI must
+          # actually exercise them)
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - run: ./scripts/dev-setup.sh
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace

@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/proctor-policy",
+    "crates/proctor-monitor",
+    "crates/proctor-sandbox",
+    "crates/proctor-grader",
+    "crates/proctor-verdict",
+    "crates/proctor-adapter-tb",
+    "crates/proctor-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/dylanp12/proctor"
+
+[workspace.dependencies]
+proctor-policy = { path = "crates/proctor-policy" }
+proctor-monitor = { path = "crates/proctor-monitor" }
+proctor-sandbox = { path = "crates/proctor-sandbox" }
+proctor-grader = { path = "crates/proctor-grader" }
+proctor-verdict = { path = "crates/proctor-verdict" }
+proctor-adapter-tb = { path = "crates/proctor-adapter-tb" }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+nix = { version = "0.30", features = ["fs", "hostname", "mount", "net", "poll", "process", "sched", "signal", "socket", "term", "uio", "user"] }
+libseccomp = "0.4"
+libc = "0.2"
+sha2 = "0.10"
+hex = "0.4"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde_json_canonicalizer = "0.3"
+clap = { version = "4", features = ["derive"] }
+walkdir = "2"
+tempfile = "3"
+anyhow = "1"

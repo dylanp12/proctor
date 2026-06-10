@@ -7,3 +7,6 @@
 *.swp
 .idea/
 .vscode/
+
+# proctor dev (libseccomp linker symlink)
+.dev/

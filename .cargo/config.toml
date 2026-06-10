@@ -1,0 +1,2 @@
+[env]
+LIBSECCOMP_LIB_PATH = { value = ".dev/lib", relative = true }

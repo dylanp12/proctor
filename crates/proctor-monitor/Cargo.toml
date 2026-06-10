@@ -1,0 +1,18 @@
+[package]
+name = "proctor-monitor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+hex.workspace = true
+libseccomp.workspace = true
+nix.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

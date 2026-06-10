@@ -187,8 +187,9 @@ optional microVM backend *only if* a concrete threat ever justifies it (it does 
 - **Fail closed.** If isolation cannot be established (namespace/mount/netns/seccomp setup fails), the
   run *errors*; never proceed under-protected. An under-isolated run is worse than no run.
 - **Reuse primitives, don't reinvent syscalls.** Build the sandbox *assembly* ourselves (that's the
-  point), but on battle-tested crates: `nix` (namespaces, mounts, unshare), `seccompiler` (BPF
-  filters), `caps`, `cgroups-rs`, `rustix`. No hand-rolled syscall ABI.
+  point), but on battle-tested crates: `nix` (namespaces, mounts, unshare), `libseccomp` (seccomp
+  unotify; **not** `seccompiler` — it lacks `SECCOMP_RET_USER_NOTIF`, see the viability review),
+  `libc`, `walkdir`. No hand-rolled syscall ABI.
 - **Linux-only, and say so loudly.** Benchmarks run on Linux; the harness must too. Dev on Linux/WSL2.
   CI runs on Linux. Don't add cross-platform shims for an audience that doesn't exist.
 - **Determinism & reproducibility are features.** The verdict carries an environment digest; the same
