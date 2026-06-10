@@ -95,10 +95,20 @@ pub fn grade(req: &GradeRequest, invoker: &InitInvoker) -> Result<GradeResult, G
             exit_code,
         }),
         GradeProtocol::RewardFile { path } => {
-            // the reward file landed in the writable /logs bind on the host side
+            // the reward file landed in the writable /logs bind on the host side.
+            // Harbor writes reward.json (preferred) or reward.txt (bare number);
+            // accept whichever the verifier produced in that directory.
             let rel = path.strip_prefix("/logs").unwrap_or(path);
             let host_path = logs_host.join(rel);
-            let reward = read_reward(&host_path)?;
+            let candidates = [
+                host_path.clone(),
+                host_path.with_file_name("reward.json"),
+                host_path.with_file_name("reward.txt"),
+            ];
+            let found = candidates.iter().find(|p| p.exists()).ok_or_else(|| {
+                GradeError::Reward(format!("no reward file in {}", logs_host.display()))
+            })?;
+            let reward = read_reward(found)?;
             Ok(GradeResult {
                 pass: reward > 0.0,
                 reward: Some(reward),

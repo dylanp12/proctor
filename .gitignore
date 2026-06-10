@@ -13,3 +13,6 @@
 
 # claude code session state
 .claude/
+
+# regenerable real-task report artifacts (run-report.sh output)
+corpus/real-tasks/out/

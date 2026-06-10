@@ -72,3 +72,26 @@ fn reward_file_protocol_reads_json_reward() {
     assert!(r.pass);
     assert_eq!(r.reward, Some(1.0));
 }
+
+#[test]
+fn reward_file_protocol_falls_back_to_reward_txt() {
+    require_sandbox!();
+    let d = staged();
+    // the real Harbor test.sh writes a bare number to reward.txt; we configured
+    // the json path but the verifier produced reward.txt — accept it.
+    let req = GradeRequest {
+        workspace: d.path().join("ws"),
+        workspace_mount: PathBuf::from("/workspace"),
+        oracle: d.path().join("oracle"),
+        oracle_mount: PathBuf::from("/oracle"),
+        grade_cmd: "mkdir -p /logs/verifier && echo 1 > /logs/verifier/reward.txt".into(),
+        protocol: GradeProtocol::RewardFile {
+            path: PathBuf::from("/logs/verifier/reward.json"),
+        },
+        session: d.path().join("grade-session-txt"),
+        wall_time_secs: 30,
+    };
+    let r = grade(&req, &invoker()).unwrap();
+    assert!(r.pass);
+    assert_eq!(r.reward, Some(1.0));
+}

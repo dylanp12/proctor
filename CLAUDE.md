@@ -10,7 +10,10 @@ corpus blocks + logs every documented in-sandbox cheat class. Spec:
 viability review (verdict: build with changes):
 [`docs/superpowers/specs/2026-06-09-proctor-viability-review.md`](docs/superpowers/specs/2026-06-09-proctor-viability-review.md);
 plan: [`docs/superpowers/plans/2026-06-09-proctor-v1.md`](docs/superpowers/plans/2026-06-09-proctor-v1.md);
-usage: [`docs/usage.md`](docs/usage.md).
+usage: [`docs/usage.md`](docs/usage.md). A real Terminal-Bench 2 task now runs end-to-end
+(reference solution → clean pass; oracle read → blocked + logged): see
+[`docs/reports/2026-06-10-real-task-log-summary.md`](docs/reports/2026-06-10-real-task-log-summary.md)
+(reproduce with `corpus/real-tasks/run-report.sh`).
 **Working name:** Proctor (changeable). **Language:** Rust. **Platform:** Linux-only (v1).
 
 > **Verified-record note (do not regress):** the headline numbers are "1,000+

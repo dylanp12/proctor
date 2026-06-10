@@ -19,7 +19,7 @@ fn write(p: &Path, s: &str) {
 fn tb_task(dir: &Path) {
     write(
         &dir.join("task.toml"),
-        "version=\"1.0\"\n[agent]\nnetwork = false\ntimeout_sec = 60\n",
+        "schema_version=\"1.1\"\n[agent]\ntimeout_sec = 60.0\n[environment]\nallow_internet = false\n",
     );
     write(
         &dir.join("instruction.md"),

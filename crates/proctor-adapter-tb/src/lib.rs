@@ -4,7 +4,7 @@
 //! Harbor task layout (Terminal-Bench 2.x):
 //! ```text
 //! <task>/
-//!   task.toml            metadata; may carry agent.network / agent.timeout_sec
+//!   task.toml            metadata; agent.timeout_sec + environment.allow_internet
 //!   instruction.md       the prompt
 //!   environment/         Dockerfile + build context
 //!   solution/solve.sh    reference solution (never shown to the agent)
@@ -44,14 +44,22 @@ pub struct TbPlan {
 struct TaskToml {
     #[serde(default)]
     agent: AgentSection,
+    #[serde(default)]
+    environment: EnvSection,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct AgentSection {
+    // real Harbor task.toml writes this as a float (e.g. 900.0)
     #[serde(default)]
-    network: bool,
+    timeout_sec: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct EnvSection {
+    // real Harbor gates egress here ([environment].allow_internet)
     #[serde(default)]
-    timeout_sec: Option<u64>,
+    allow_internet: bool,
 }
 
 pub fn load_task(dir: &Path) -> Result<TbPlan, AdapterError> {
@@ -80,7 +88,7 @@ pub fn load_task(dir: &Path) -> Result<TbPlan, AdapterError> {
         reads.push(solution.clone());
     }
 
-    let network = if cfg.agent.network {
+    let network = if cfg.environment.allow_internet {
         NetworkPolicy {
             mode: NetworkMode::Allowlist,
             allow: vec![
@@ -117,14 +125,18 @@ pub fn load_task(dir: &Path) -> Result<TbPlan, AdapterError> {
         network,
         git: None,
         env: EnvPolicy {
-            allow: if cfg.agent.network {
+            allow: if cfg.environment.allow_internet {
                 vec!["ANTHROPIC_API_KEY".into()]
             } else {
                 vec![]
             },
         },
         limits: Limits {
-            wall_time_secs: cfg.agent.timeout_sec.unwrap_or(1800),
+            wall_time_secs: cfg
+                .agent
+                .timeout_sec
+                .map(|t| t.ceil() as u64)
+                .unwrap_or(1800),
             ..Limits::default()
         },
     };
@@ -158,7 +170,7 @@ mod tests {
         let t = d.path();
         write(
             &t.join("task.toml"),
-            "version = \"1.0\"\n[metadata]\ndifficulty = \"medium\"\n[agent]\nnetwork = false\ntimeout_sec = 600\n",
+            "schema_version = \"1.1\"\n[metadata]\ndifficulty = \"medium\"\n[agent]\ntimeout_sec = 600.0\n[environment]\nallow_internet = false\n",
         );
         write(&t.join("instruction.md"), "Make the tests pass.\n");
         write(
@@ -213,11 +225,11 @@ mod tests {
     }
 
     #[test]
-    fn network_true_becomes_allowlist_with_llm_api() {
+    fn allow_internet_becomes_allowlist_with_llm_api() {
         let task = sample_task();
         std::fs::write(
             task.path().join("task.toml"),
-            "version=\"1.0\"\n[agent]\nnetwork = true\n",
+            "schema_version=\"1.1\"\n[environment]\nallow_internet = true\n",
         )
         .unwrap();
         let plan = load_task(task.path()).unwrap();
