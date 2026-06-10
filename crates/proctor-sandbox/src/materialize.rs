@@ -8,7 +8,10 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, thiserror::Error)]
 pub enum MaterializeError {
     #[error("io error at {path}: {source}")]
-    Io { path: PathBuf, source: std::io::Error },
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     #[error("a forbidden path masks the entire workspace mount ({0}); nothing to run")]
     MaskSwallowsWorkspace(PathBuf),
 }
@@ -21,7 +24,10 @@ pub struct MaterializeReport {
 }
 
 fn io_err(path: &Path) -> impl FnOnce(std::io::Error) -> MaterializeError + '_ {
-    move |source| MaterializeError::Io { path: path.to_path_buf(), source }
+    move |source| MaterializeError::Io {
+        path: path.to_path_buf(),
+        source,
+    }
 }
 
 /// Copy `src` -> `dest`, excluding any entry whose in-sandbox path
@@ -42,9 +48,14 @@ pub fn materialize_workspace(
     while let Some(entry) = walker.next() {
         let entry = entry.map_err(|e| MaterializeError::Io {
             path: src.to_path_buf(),
-            source: e.into_io_error().unwrap_or_else(|| std::io::Error::other("walk error")),
+            source: e
+                .into_io_error()
+                .unwrap_or_else(|| std::io::Error::other("walk error")),
         })?;
-        let rel = entry.path().strip_prefix(src).expect("walkdir yields children of src");
+        let rel = entry
+            .path()
+            .strip_prefix(src)
+            .expect("walkdir yields children of src");
         if rel.as_os_str().is_empty() {
             continue; // the root itself
         }
@@ -90,7 +101,9 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(d.path().join("src")).unwrap();
         std::fs::write(d.path().join("src/app.sh"), "echo wrong\n").unwrap();
-        let mut perms = std::fs::metadata(d.path().join("src/app.sh")).unwrap().permissions();
+        let mut perms = std::fs::metadata(d.path().join("src/app.sh"))
+            .unwrap()
+            .permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(d.path().join("src/app.sh"), perms).unwrap();
         std::fs::create_dir_all(d.path().join("tests")).unwrap();
@@ -115,9 +128,15 @@ mod tests {
         )
         .unwrap();
         assert!(dst.path().join("src/app.sh").exists());
-        assert!(!dst.path().join("tests").exists(), "oracle dir must not be materialized");
+        assert!(
+            !dst.path().join("tests").exists(),
+            "oracle dir must not be materialized"
+        );
         assert_eq!(report.excluded, vec![PathBuf::from("tests")]);
-        let mode = std::fs::metadata(dst.path().join("src/app.sh")).unwrap().permissions().mode();
+        let mode = std::fs::metadata(dst.path().join("src/app.sh"))
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(mode & 0o777, 0o755);
         let md = std::fs::symlink_metadata(dst.path().join("run")).unwrap();
         assert!(md.file_type().is_symlink());
@@ -131,8 +150,13 @@ mod tests {
     fn mask_outside_mount_at_does_not_affect_copy() {
         let src = setup_src();
         let dst = tempfile::tempdir().unwrap();
-        materialize_workspace(src.path(), Path::new("/workspace"), &masks(&["/oracle"]), dst.path())
-            .unwrap();
+        materialize_workspace(
+            src.path(),
+            Path::new("/workspace"),
+            &masks(&["/oracle"]),
+            dst.path(),
+        )
+        .unwrap();
         assert!(dst.path().join("tests/expected.txt").exists());
     }
 

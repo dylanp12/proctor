@@ -21,7 +21,11 @@ impl Caps {
 }
 
 pub fn probe() -> Caps {
-    Caps { userns: probe_userns(), overlayfs: probe_overlayfs(), seccomp: probe_seccomp() }
+    Caps {
+        userns: probe_userns(),
+        overlayfs: probe_overlayfs(),
+        seccomp: probe_seccomp(),
+    }
 }
 
 /// Spawn /bin/true under the full unshare set. Must be a spawned child:

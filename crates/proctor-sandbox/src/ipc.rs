@@ -14,11 +14,20 @@ pub const ACK_FD: RawFd = 102;
 pub enum StatusEvent {
     MountsReady,
     /// pid1's pid as seen from the HOST pid namespace (init's fork return)
-    Pid1 { pid: i32 },
+    Pid1 {
+        pid: i32,
+    },
     Sandboxed,
-    ExecFailed { error: String },
-    AgentExit { code: i32 },
-    SetupError { stage: String, error: String },
+    ExecFailed {
+        error: String,
+    },
+    AgentExit {
+        code: i32,
+    },
+    SetupError {
+        stage: String,
+        error: String,
+    },
 }
 
 impl StatusEvent {
