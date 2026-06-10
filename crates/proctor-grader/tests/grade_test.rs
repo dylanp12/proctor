@@ -26,6 +26,7 @@ fn exit_code_protocol_pass_and_fail() {
     std::fs::write(d.path().join("oracle/expected.txt"), "42\n").unwrap();
     let req = GradeRequest {
         workspace: d.path().join("ws"),
+        workspace_mount: PathBuf::from("/workspace"),
         oracle: d.path().join("oracle"),
         oracle_mount: PathBuf::from("/oracle"),
         grade_cmd: "diff -q /workspace/out.txt /oracle/expected.txt".into(),
@@ -55,6 +56,7 @@ fn reward_file_protocol_reads_json_reward() {
     let d = staged();
     let req = GradeRequest {
         workspace: d.path().join("ws"),
+        workspace_mount: PathBuf::from("/workspace"),
         oracle: d.path().join("oracle"),
         oracle_mount: PathBuf::from("/oracle"),
         grade_cmd:

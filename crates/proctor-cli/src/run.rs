@@ -120,6 +120,7 @@ pub fn run(
     let gr = grade(
         &GradeRequest {
             workspace: merged,
+            workspace_mount: "/workspace".into(),
             oracle: task.join("oracle"),
             oracle_mount: "/oracle".into(),
             grade_cmd,
@@ -174,6 +175,168 @@ pub fn run(
     }
     .sign(&signer);
 
+    verdict
+        .save(&out.join("verdict.json"))
+        .context("write verdict")?;
+    Ok(verdict)
+}
+
+/// `proctor run-tb`: run a Terminal-Bench (Harbor) task under Proctor. With
+/// `use_image` and docker present, the task's environment image becomes the
+/// overlay-lower rootfs; otherwise the host system rootfs is used.
+pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Result<Verdict> {
+    let caps = proctor_sandbox::caps::probe();
+    anyhow::ensure!(caps.all(), "host cannot sandbox (fail closed): {caps:?}");
+    let plan = proctor_adapter_tb::load_task(task).context("load TB task")?;
+    std::fs::create_dir_all(out)?;
+    let session = out.join("agent-session");
+
+    let rootfs = if use_image && proctor_adapter_tb::rootfs::docker_available() {
+        let rootfs_dir = out.join("rootfs");
+        let _ = std::fs::remove_dir_all(&rootfs_dir);
+        let tag = format!(
+            "proctor-tb-{}:latest",
+            task.file_name().unwrap_or_default().to_string_lossy()
+        );
+        proctor_adapter_tb::rootfs::export_rootfs(&plan.env_dir, &tag, &rootfs_dir)
+            .context("export task image rootfs")?;
+        RootfsSpec::Dir(rootfs_dir)
+    } else {
+        if use_image {
+            eprintln!("proctor: docker unavailable; using host rootfs (task env may differ)");
+        }
+        RootfsSpec::HostSystem
+    };
+
+    // materialize the agent workdir (/app). Seed from an optional task/workspace
+    // dir if present; otherwise start empty (the agent creates files).
+    let lower = session.join("ws_lower");
+    let _ = std::fs::remove_dir_all(&lower);
+    std::fs::create_dir_all(&lower)?;
+    let seed = task.join("workspace");
+    let mask_set = plan.policy.mask_set();
+    if seed.is_dir() {
+        proctor_sandbox::materialize::materialize_workspace(
+            &seed,
+            &plan.workdir,
+            &mask_set,
+            &lower,
+        )
+        .context("materialize workspace")?;
+    }
+
+    let network = match plan.policy.network.mode {
+        NetworkMode::Deny => NetSpec::Deny,
+        NetworkMode::Allowlist => NetSpec::Allowlist {
+            proxy_sock: "/run/proctor/egress.sock".into(),
+        },
+    };
+    let _proxy = if let NetworkMode::Allowlist = plan.policy.network.mode {
+        let sock = session.join("egress.sock");
+        let allow: Vec<String> = plan
+            .policy
+            .network
+            .allow
+            .iter()
+            .map(|hp| format!("{}:{}", hp.host, hp.port))
+            .collect();
+        Some(proctor_sandbox::proxy::HostProxy::start(&sock, allow).context("start egress proxy")?)
+    } else {
+        None
+    };
+
+    let mut env: Vec<(String, String)> =
+        vec![("PATH".into(), "/usr/bin:/bin:/usr/local/bin:/app".into())];
+    for k in &plan.policy.env.allow {
+        if let Ok(v) = std::env::var(k) {
+            env.push((k.clone(), v));
+        }
+    }
+
+    let mut spec = SandboxSpec {
+        rootfs,
+        workspace_lower: Some(lower),
+        mount_at: plan.workdir.clone(),
+        masks: mask_set.iter().cloned().collect(),
+        network,
+        env,
+        agent_cmd: agent_cmd.to_string(),
+        agent_cwd: plan.workdir.clone(),
+        session: session.clone(),
+        wall_time_secs: plan.policy.limits.wall_time_secs,
+        pids_limit: plan.policy.limits.pids,
+        memory_bytes: plan.policy.limits.memory_bytes,
+        pivot: true,
+        seccomp: true,
+        host_proxy_sock: None,
+        extra_binds: vec![],
+    };
+    if let NetworkMode::Allowlist = plan.policy.network.mode {
+        spec.host_proxy_sock = Some(session.join("egress.sock"));
+    }
+
+    let outcome = run_sandboxed(&spec, &self_invoker()).context("agent sandbox run")?;
+    let _ = std::fs::copy(
+        session.join("violations.jsonl"),
+        out.join("violations.jsonl"),
+    );
+
+    // grade: stage the agent's /app result + the oracle at /tests, run test.sh,
+    // read the reward file the verifier wrote.
+    let merged = out.join("graded-workspace");
+    let _ = std::fs::remove_dir_all(&merged);
+    merge_overlay(
+        &session.join("ws_lower"),
+        &session.join("ws_upper"),
+        &merged,
+    )?;
+    let gr = grade(
+        &GradeRequest {
+            workspace: merged,
+            workspace_mount: plan.workdir.clone(),
+            oracle: plan.oracle_dir.clone(),
+            oracle_mount: "/tests".into(),
+            grade_cmd: plan.grade_cmd.clone(),
+            protocol: GradeProtocol::RewardFile {
+                path: "/logs/verifier/reward.json".into(),
+            },
+            session: out.join("grade-session"),
+            wall_time_secs: plan.policy.limits.wall_time_secs,
+        },
+        &self_invoker(),
+    )
+    .context("grade")?;
+
+    let spec_json = serde_json::to_vec(&spec)?;
+    let policy_yaml = plan.policy.to_yaml().context("policy to yaml")?;
+    let versions = format!("proctor={}", env!("CARGO_PKG_VERSION"));
+    let digest = env_digest(&[
+        ("policy", policy_yaml.as_bytes()),
+        ("spec", &spec_json),
+        ("versions", versions.as_bytes()),
+    ]);
+
+    let signer = Signer::generate();
+    std::fs::write(out.join("signing-seed.hex"), signer.to_seed_hex())?;
+    let status = if outcome.violations_count > 0 {
+        Status::Compromised
+    } else {
+        Status::Clean
+    };
+    let verdict = VerdictBuilder {
+        task_id: task
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        pass: gr.pass,
+        status,
+        violations_head: outcome.violations_head.clone(),
+        violations_count: outcome.violations_count,
+        env_digest: digest,
+        reward: gr.reward,
+    }
+    .sign(&signer);
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;

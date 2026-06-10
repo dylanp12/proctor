@@ -17,9 +17,10 @@ pub enum GradeProtocol {
 
 #[derive(Debug, Clone)]
 pub struct GradeRequest {
-    pub workspace: PathBuf,    // host path: the agent's resulting workspace
-    pub oracle: PathBuf,       // host path: the true oracle/tests
-    pub oracle_mount: PathBuf, // where the oracle is mounted for the grader
+    pub workspace: PathBuf,       // host path: the agent's resulting workspace
+    pub workspace_mount: PathBuf, // where the workspace is mounted (/workspace, /app)
+    pub oracle: PathBuf,          // host path: the true oracle/tests
+    pub oracle_mount: PathBuf,    // where the oracle is mounted for the grader
     pub grade_cmd: String,
     pub protocol: GradeProtocol,
     pub session: PathBuf,
@@ -58,12 +59,12 @@ pub fn grade(req: &GradeRequest, invoker: &InitInvoker) -> Result<GradeResult, G
     let spec = SandboxSpec {
         rootfs: RootfsSpec::HostSystem,
         workspace_lower: Some(lower),
-        mount_at: PathBuf::from("/workspace"),
+        mount_at: req.workspace_mount.clone(),
         masks: vec![],          // grader may see everything
         network: NetSpec::Deny, // grading is offline in v1
         env: vec![("PATH".into(), "/usr/bin:/bin:/usr/local/bin".into())],
         agent_cmd: req.grade_cmd.clone(),
-        agent_cwd: PathBuf::from("/workspace"),
+        agent_cwd: req.workspace_mount.clone(),
         session: req.session.clone(),
         wall_time_secs: req.wall_time_secs,
         pids_limit: 256,

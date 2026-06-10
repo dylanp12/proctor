@@ -30,6 +30,18 @@ enum Cmd {
         #[arg(long)]
         signing_seed: Option<String>,
     },
+    /// Run a Terminal-Bench (Harbor) task directory under Proctor.
+    RunTb {
+        #[arg(long)]
+        task: PathBuf,
+        #[arg(long)]
+        agent: String,
+        #[arg(long)]
+        out: PathBuf,
+        /// build the task's docker image as the rootfs (default: host rootfs)
+        #[arg(long)]
+        image: bool,
+    },
     /// Verify a verdict's signature against a public key.
     Verify {
         #[arg(long)]
@@ -67,6 +79,24 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("proctor: run failed: {e:#}");
+                1
+            }
+        },
+        Cmd::RunTb {
+            task,
+            agent,
+            out,
+            image,
+        } => match run::run_tb(&task, &agent, &out, image) {
+            Ok(v) => {
+                println!(
+                    "verdict: pass={} status={:?} violations={} reward={:?}",
+                    v.body.pass, v.body.status, v.body.violations_count, v.body.reward
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("proctor: run-tb failed: {e:#}");
                 1
             }
         },
