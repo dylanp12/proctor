@@ -26,6 +26,7 @@ fn spec(session: &Path, cmd: &str) -> SandboxSpec {
         pivot: true,
         seccomp: false,
         host_proxy_sock: None,
+        extra_binds: vec![],
     }
 }
 fn out(s: &Path) -> String {

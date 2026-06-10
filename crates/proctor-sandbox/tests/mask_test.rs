@@ -32,6 +32,7 @@ fn pivoted_spec(session: &Path, masks: Vec<PathBuf>, cmd: &str) -> SandboxSpec {
         pivot: true,
         seccomp: false,
         host_proxy_sock: None,
+        extra_binds: vec![],
     }
 }
 

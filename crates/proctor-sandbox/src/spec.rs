@@ -20,6 +20,16 @@ pub enum NetSpec {
     Allowlist { proxy_sock: PathBuf },
 }
 
+/// A host directory bound into the sandbox at an absolute path. Used by the
+/// grader to stage the oracle (read-only) and a writable /logs the verifier
+/// reward file lands in.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BindMount {
+    pub host: PathBuf,
+    pub sandbox: PathBuf,
+    pub writable: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxSpec {
     pub rootfs: RootfsSpec,
@@ -45,6 +55,9 @@ pub struct SandboxSpec {
     /// host path of the proxy unix socket (bind-mounted to network.proxy_sock)
     #[serde(default)]
     pub host_proxy_sock: Option<PathBuf>,
+    /// extra host->sandbox bind mounts (grader oracle + writable /logs)
+    #[serde(default)]
+    pub extra_binds: Vec<BindMount>,
 }
 
 impl SandboxSpec {

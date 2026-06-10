@@ -83,6 +83,44 @@ pub fn build_and_pivot(spec: &SandboxSpec) -> Result<(), MountError> {
         )?;
     }
 
+    // extra binds (grader oracle ro + writable /logs). Before masks so a mask
+    // always wins over an accidental overlap.
+    for b in &spec.extra_binds {
+        let target = join_abs(&newroot, &b.sandbox);
+        if b.host.is_dir() {
+            mkdir(&target)?;
+        } else {
+            if let Some(parent) = target.parent() {
+                mkdir(parent)?;
+            }
+            let _ = std::fs::File::create(&target);
+        }
+        m(
+            "extra-bind",
+            &target,
+            mount(
+                Some(b.host.as_path()),
+                &target,
+                None::<&str>,
+                MsFlags::MS_BIND | MsFlags::MS_REC,
+                None::<&str>,
+            ),
+        )?;
+        if !b.writable {
+            m(
+                "extra-bind-ro",
+                &target,
+                mount(
+                    None::<&str>,
+                    &target,
+                    None::<&str>,
+                    MsFlags::MS_REMOUNT | MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_RDONLY,
+                    None::<&str>,
+                ),
+            )?;
+        }
+    }
+
     // masks: empty read-only tmpfs over each forbidden path
     for mask in &spec.masks {
         let target = join_abs(&newroot, mask);

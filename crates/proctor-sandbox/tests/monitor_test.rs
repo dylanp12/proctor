@@ -31,6 +31,7 @@ fn spec(session: &Path, masks: Vec<PathBuf>, net: NetSpec, cmd: &str) -> Sandbox
         pivot: true,
         seccomp: true,
         host_proxy_sock: None,
+        extra_binds: vec![],
     }
 }
 

@@ -61,6 +61,7 @@ fn allowlisted_host_reachable_denied_host_refused_and_logged() {
         pivot: true,
         seccomp: false,
         host_proxy_sock: Some(sock.clone()),
+        extra_binds: vec![],
     };
     let _r = run_sandboxed(&spec, &invoker()).unwrap();
     let o = out(s.path());

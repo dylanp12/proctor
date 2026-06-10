@@ -31,6 +31,7 @@ fn spec(session: &std::path::Path, cmd: &str, wall: u64) -> SandboxSpec {
         pivot: false,   // Task 6 flips this in real runs
         seccomp: false, // Task 11
         host_proxy_sock: None,
+        extra_binds: vec![],
     }
 }
 
