@@ -10,3 +10,6 @@
 
 # proctor dev (libseccomp linker symlink)
 .dev/
+
+# claude code session state
+.claude/
