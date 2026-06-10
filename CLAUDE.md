@@ -4,9 +4,22 @@
 > *what* Proctor is, but *why it exists*, *what gap it fills*, and *what would make it worth killing*.
 > Keep the project honest to all three.
 
-**Status:** design approved, pre-implementation (2026-06-09). Spec:
-[`docs/superpowers/specs/2026-06-09-proctor-design.md`](docs/superpowers/specs/2026-06-09-proctor-design.md).
+**Status:** v1 implemented (2026-06-09) — M0–M9 complete, all tests green, the exploit
+corpus blocks + logs every documented in-sandbox cheat class. Spec:
+[`docs/superpowers/specs/2026-06-09-proctor-design.md`](docs/superpowers/specs/2026-06-09-proctor-design.md);
+viability review (verdict: build with changes):
+[`docs/superpowers/specs/2026-06-09-proctor-viability-review.md`](docs/superpowers/specs/2026-06-09-proctor-viability-review.md);
+plan: [`docs/superpowers/plans/2026-06-09-proctor-v1.md`](docs/superpowers/plans/2026-06-09-proctor-v1.md);
+usage: [`docs/usage.md`](docs/usage.md).
 **Working name:** Proctor (changeable). **Language:** Rust. **Platform:** Linux-only (v1).
+
+> **Verified-record note (do not regress):** the headline numbers are "1,000+
+> *harness-level* cheating traces" concentrated in Terminal-Bench 2 + HAL USACO, plus
+> ~30 task-level cases; the 415/429 figure is one submission (Pilot). Proctor's honest
+> claim is **in-sandbox access cheats die by construction + leave a tamper-evident trail**
+> — scaffold-injected answers, in-binary answers, and grader-fooling are documented
+> non-goals (see the viability review and `corpus/RESULTS.md`). v1 uses `libseccomp`
+> (not `seccompiler`, which lacks USER_NOTIF) and resolved `nix` 0.30.
 
 ---
 
