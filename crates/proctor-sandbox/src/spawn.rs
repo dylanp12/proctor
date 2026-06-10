@@ -152,6 +152,7 @@ pub fn run_sandboxed(
     let mut limits_degraded = false;
     let mut acked = false;
     let mut monitor: Option<std::thread::JoinHandle<MonitorHandle>> = None;
+    let monitor_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
@@ -190,8 +191,9 @@ pub fn run_sandboxed(
                                 net_allow: vec![],
                             };
                             let cwd = spec.agent_cwd.display().to_string();
+                            let stop = monitor_stop.clone();
                             monitor = Some(std::thread::spawn(move || {
-                                proctor_monitor::supervisor::run(fd, chain, ctx, cwd)
+                                proctor_monitor::supervisor::run(fd, chain, ctx, cwd, stop)
                             }));
                         }
                         // release pid1 to fork the agent (cgroup + monitor armed)
@@ -227,6 +229,10 @@ pub fn run_sandboxed(
     let _ = child.wait();
     let _ = pump.join();
     drop(ack_w);
+
+    // the agent is reaped; tell the monitor to drain and exit (POLLHUP usually
+    // already fired, this is the backstop so join() never blocks forever)
+    monitor_stop.store(true, std::sync::atomic::Ordering::Relaxed);
 
     let (violations_head, violations_count) = match monitor {
         Some(h) => match h.join() {

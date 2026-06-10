@@ -1,15 +1,12 @@
 //! Network namespace finishing. Default-deny is free (empty netns has no
-//! route); we only bring loopback up. Allowlist forwarder bridges to the host
-//! proxy.
+//! route); we only bring loopback up. The allowlist forwarder is started later
+//! in pid1 (init cannot create threads after unshare(CLONE_NEWPID): its
+//! pid_ns_for_children differs from its own, so clone(CLONE_THREAD) -> EINVAL).
 
 use crate::spec::NetSpec;
 
-pub fn setup(net: &NetSpec) -> Result<(), String> {
-    bring_loopback_up().map_err(|e| format!("lo up: {e}"))?;
-    match net {
-        NetSpec::Deny => Ok(()),
-        NetSpec::Allowlist { proxy_sock } => crate::proxy::start_in_ns_forwarder(proxy_sock),
-    }
+pub fn setup(_net: &NetSpec) -> Result<(), String> {
+    bring_loopback_up().map_err(|e| format!("lo up: {e}"))
 }
 
 /// Equivalent of `ip link set lo up`: SIOCGIFFLAGS / SIOCSIFFLAGS with IFF_UP.

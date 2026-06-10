@@ -7,7 +7,9 @@ use crate::chain::ChainWriter;
 use crate::classify::{self, ClassifyCtx};
 use crate::event::Violation;
 use libseccomp::{notify_id_valid, ScmpNotifReq, ScmpNotifResp, ScmpNotifRespFlags};
-use std::os::fd::{AsRawFd, OwnedFd};
+use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
+use std::os::fd::{AsFd, AsRawFd, OwnedFd};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub struct MonitorHandle {
@@ -15,39 +17,63 @@ pub struct MonitorHandle {
     pub count: u64,
 }
 
-/// Consume notifications on `notify_fd` until EOF (the sandbox exits), writing
-/// violations to `chain`. `cwd` is the agent's working dir (for relative paths).
+/// Consume notifications on `notify_fd` until the sandbox exits, writing
+/// violations to `chain`. `cwd` is the agent's working dir (for relative
+/// paths). We poll rather than block in `receive`: a blocking `receive` does
+/// not reliably wake when the filter is orphaned, so we watch for POLLHUP and
+/// also honor `stop`, which the parent sets once the agent has been reaped.
 pub fn run(
     notify_fd: OwnedFd,
     chain: Arc<Mutex<ChainWriter>>,
     ctx: ClassifyCtx,
     cwd: String,
+    stop: Arc<AtomicBool>,
 ) -> MonitorHandle {
     let fd = notify_fd.as_raw_fd();
+    let borrowed = notify_fd.as_fd();
     let mut step: u64 = 0;
     let mut count: u64 = 0;
     loop {
-        let req = match ScmpNotifReq::receive(fd) {
-            Ok(r) => r,
-            Err(_) => break, // fd closed / all filtered procs gone
+        let mut fds = [PollFd::new(borrowed, PollFlags::POLLIN)];
+        let n = match poll(&mut fds, PollTimeout::from(200u16)) {
+            Ok(n) => n,
+            Err(nix::errno::Errno::EINTR) => continue,
+            Err(_) => break,
         };
-        step += 1;
-        // TOCTOU bracket: only read target memory while the request is live
-        let still_valid = notify_id_valid(fd, req.id).is_ok();
-        let violation = if still_valid {
-            classify(step, &req, &ctx, &cwd)
-        } else {
-            None
-        };
-        if let Some(v) = violation {
-            if chain.lock().unwrap().append(&v).is_ok() {
-                count += 1;
+        if n == 0 {
+            // timeout: stop only once the run is over (no pending notifications)
+            if stop.load(Ordering::Relaxed) {
+                break;
             }
+            continue;
         }
-        // always continue: the syscall proceeds and fails on the masked fs / dead netns
-        let resp = ScmpNotifResp::new_continue(req.id, ScmpNotifRespFlags::empty());
-        if resp.respond(fd).is_err() {
-            break;
+        let revents = fds[0].revents().unwrap_or(PollFlags::empty());
+        if revents.contains(PollFlags::POLLIN) {
+            let req = match ScmpNotifReq::receive(fd) {
+                Ok(r) => r,
+                Err(_) => break,
+            };
+            step += 1;
+            // TOCTOU bracket: only read target memory while the request is live
+            let still_valid = notify_id_valid(fd, req.id).is_ok();
+            let violation = if still_valid {
+                classify(step, &req, &ctx, &cwd)
+            } else {
+                None
+            };
+            if let Some(v) = violation {
+                if chain.lock().unwrap().append(&v).is_ok() {
+                    count += 1;
+                }
+            }
+            // always continue: the syscall proceeds and fails on the masked fs / dead netns
+            let resp = ScmpNotifResp::new_continue(req.id, ScmpNotifRespFlags::empty());
+            if resp.respond(fd).is_err() {
+                break;
+            }
+        } else if revents.intersects(PollFlags::POLLHUP | PollFlags::POLLERR | PollFlags::POLLNVAL)
+        {
+            break; // filter orphaned: all filtered procs gone
         }
     }
     let head = chain.lock().unwrap().head().to_string();

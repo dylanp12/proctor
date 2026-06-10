@@ -101,7 +101,7 @@ pub fn build_and_pivot(spec: &SandboxSpec) -> Result<(), MountError> {
     }
 
     // /dev (minimal), /tmp, /run/proctor
-    dev_minimal(&newroot)?;
+    dev_setup(&newroot)?;
     let tmp = newroot.join("tmp");
     mkdir(&tmp)?;
     m(
@@ -227,7 +227,15 @@ fn overlay_rootfs(spec: &SandboxSpec, newroot: &Path, lower: &Path) -> Result<()
     )
 }
 
-fn dev_minimal(newroot: &Path) -> Result<(), MountError> {
+fn dev_setup(newroot: &Path) -> Result<(), MountError> {
+    // A tmpfs we own, so /dev/null is writable. In a single-uid user namespace
+    // we cannot mknod, and a bind-mounted host device node is owned by an
+    // unmapped uid (host root -> "nobody"), so the shell's `>` redirect
+    // (O_CREAT|O_TRUNC) is denied — and we cannot map host uid 0 in (it is not
+    // in our subuid range). So null/full become regular writable files we own
+    // (writes discarded on teardown), while the read-only devices are bound
+    // from the host (reads work fine). Safe under our threat model: /dev holds
+    // no oracle and we are not defending against privilege escalation.
     let dev = newroot.join("dev");
     mkdir(&dev)?;
     m(
@@ -241,26 +249,31 @@ fn dev_minimal(newroot: &Path) -> Result<(), MountError> {
             None::<&str>,
         ),
     )?;
-    for node in ["null", "zero", "full", "random", "urandom", "tty"] {
+    // null + full: regular writable files we own so `cmd >/dev/null` works.
+    for f in ["null", "full"] {
+        let _ = std::fs::File::create(dev.join(f));
+    }
+    // zero/random/urandom/tty: real devices, bound from host (read works).
+    for node in ["zero", "random", "urandom", "tty"] {
         let src = PathBuf::from("/dev").join(node);
         let dst = dev.join(node);
         if !src.exists() {
             continue;
         }
-        // bind-mount the device node (mknod is blocked in userns)
         let _ = std::fs::File::create(&dst);
-        m(
-            "bind-dev",
+        let _ = mount(
+            Some(&src),
             &dst,
-            mount(
-                Some(&src),
-                &dst,
-                None::<&str>,
-                MsFlags::MS_BIND,
-                None::<&str>,
-            ),
-        )?;
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        );
     }
+    // stdio symlinks many tools expect
+    let _ = std::os::unix::fs::symlink("/proc/self/fd", dev.join("fd"));
+    let _ = std::os::unix::fs::symlink("/proc/self/fd/0", dev.join("stdin"));
+    let _ = std::os::unix::fs::symlink("/proc/self/fd/1", dev.join("stdout"));
+    let _ = std::os::unix::fs::symlink("/proc/self/fd/2", dev.join("stderr"));
     Ok(())
 }
 

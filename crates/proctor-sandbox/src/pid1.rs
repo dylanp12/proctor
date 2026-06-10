@@ -74,6 +74,13 @@ pub fn pid1_main(spec: &SandboxSpec) -> ! {
         }
     };
 
+    // allowlist mode: start the in-ns TCP->unix forwarder. Done here (in pid1,
+    // which is in the new pidns and can create threads) and AFTER the agent
+    // fork (so no fork-after-thread malloc-lock hazard).
+    if let crate::spec::NetSpec::Allowlist { proxy_sock } = &spec.network {
+        let _ = crate::proxy::start_in_ns_forwarder(proxy_sock);
+    }
+
     // reap everything; exit with the agent's code when it finishes
     let code = loop {
         match nix::sys::wait::wait() {

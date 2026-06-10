@@ -52,18 +52,33 @@ fn serve_connect(
     allow: &[String],
     dec: &Mutex<Vec<ProxyDecision>>,
 ) -> std::io::Result<()> {
-    // read request line: "CONNECT host:port HTTP/1.1\r\n" then headers to blank
+    // read the request line + headers (up to the blank line)
     let mut reader = BufReader::new(client.try_clone()?);
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    let target = line.split_whitespace().nth(1).unwrap_or("").to_string();
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line)?;
+    let mut headers = Vec::new();
     loop {
         let mut h = String::new();
         if reader.read_line(&mut h)? == 0 || h == "\r\n" || h == "\n" {
             break;
         }
+        headers.push(h);
     }
-    let allowed = allow.iter().any(|a| a == &target);
+
+    let mut tokens = request_line.split_whitespace();
+    let method = tokens.next().unwrap_or("");
+    let uri = tokens.next().unwrap_or("");
+    let version = tokens.next().unwrap_or("HTTP/1.1");
+
+    // CONNECT host:port (https tunnel) vs. absolute-form GET http://host/path
+    let connect = method.eq_ignore_ascii_case("CONNECT");
+    let target = if connect {
+        uri.to_string()
+    } else {
+        host_port_from_url(uri)
+    };
+
+    let allowed = !target.is_empty() && allow.iter().any(|a| a == &target);
     dec.lock().unwrap().push(ProxyDecision {
         target: target.clone(),
         allowed,
@@ -79,12 +94,55 @@ fn serve_connect(
             return Ok(());
         }
     };
-    client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")?;
-    splice_bidir(client, upstream);
+    if connect {
+        // tunnel: confirm, then pipe bytes both ways
+        client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")?;
+        splice_bidir(client, upstream);
+    } else {
+        // forward proxy: replay the request in origin form, then pipe the rest
+        let path = origin_form_path(uri);
+        let mut up = upstream;
+        let mut head = format!("{method} {path} {version}\r\n");
+        for h in &headers {
+            head.push_str(h);
+        }
+        head.push_str("\r\n");
+        up.write_all(head.as_bytes())?;
+        forward_bidir(reader, client, up);
+    }
     Ok(())
 }
 
-/// Copy both directions until EOF.
+/// Extract "host:port" from an absolute URL, defaulting the port by scheme.
+fn host_port_from_url(url: &str) -> String {
+    let (scheme, rest) = url.split_once("://").unwrap_or(("http", url));
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let authority = authority.rsplit('@').next().unwrap_or(authority); // strip userinfo
+    if authority.is_empty() {
+        return String::new();
+    }
+    if authority.contains(':') {
+        authority.to_string()
+    } else {
+        let port = if scheme.eq_ignore_ascii_case("https") {
+            443
+        } else {
+            80
+        };
+        format!("{authority}:{port}")
+    }
+}
+
+/// Convert an absolute-form URI to origin form (path+query) for the upstream.
+fn origin_form_path(url: &str) -> String {
+    let after_scheme = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    match after_scheme.find('/') {
+        Some(i) => after_scheme[i..].to_string(),
+        None => "/".to_string(),
+    }
+}
+
+/// Copy both directions until EOF (CONNECT tunnel: unix client <-> tcp origin).
 fn splice_bidir(a: UnixStream, b: std::net::TcpStream) {
     let (mut a_r, mut a_w) = (a.try_clone().unwrap(), a);
     let (mut b_r, mut b_w) = (b.try_clone().unwrap(), b);
@@ -94,6 +152,21 @@ fn splice_bidir(a: UnixStream, b: std::net::TcpStream) {
     });
     let _ = std::io::copy(&mut b_r, &mut a_w);
     let _ = a_w.shutdown(std::net::Shutdown::Both);
+    let _ = t.join();
+}
+
+/// Forward-proxy piping: `reader` is the buffered client read side (may hold a
+/// request body), `client` the client write side, `up` the origin connection.
+fn forward_bidir(mut reader: BufReader<UnixStream>, client: UnixStream, up: std::net::TcpStream) {
+    let mut up_w = up.try_clone().unwrap();
+    let mut up_r = up;
+    let mut client_w = client;
+    let t = std::thread::spawn(move || {
+        let _ = std::io::copy(&mut reader, &mut up_w);
+        let _ = up_w.shutdown(std::net::Shutdown::Write);
+    });
+    let _ = std::io::copy(&mut up_r, &mut client_w);
+    let _ = client_w.shutdown(std::net::Shutdown::Both);
     let _ = t.join();
 }
 
