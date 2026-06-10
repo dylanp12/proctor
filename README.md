@@ -28,13 +28,16 @@ network / IPC / UTS namespaces, fully unprivileged:
 
 - **oracle/test/solution files aren't in its mount namespace** — masked by an empty
   read-only tmpfs over an overlay workspace; `open()` → ENOENT, by construction
-- **the network namespace is empty** — egress dies with `ENETUNREACH`; an allowlist mode
-  bridges only approved hosts through a host-side CONNECT/forward proxy over a unix socket
+- **the network namespace is empty** — direct egress dies with `ENETUNREACH`; allowlist
+  mode bridges approved hosts through a host-side CONNECT/forward proxy over a unix socket,
+  and every proxy allow/deny decision is recorded in the signed timeline
 - **the repo is materialized at the base commit** — later (fix) history is never
   transferred, so `git log` can't reach it
-- **a seccomp user-notification monitor** records every attempted `open()`/`connect()`
-  against a forbidden path/host into a hash-chained, tamper-evident timeline — and always
-  replies CONTINUE, so isolation never depends on the monitor
+- **a seccomp user-notification monitor** records attempted opens (`open`/`openat`/`openat2`)
+  of forbidden paths and direct egress `connect`s into a hash-chained, tamper-evident
+  timeline, then always replies CONTINUE — so isolation is enforced by the mounts and netns,
+  never by the monitor. Enforcement is complete by construction; the *audit* covers the
+  syscalls on the notify list, not every conceivable variant
 - the grader runs in a **second** isolated sandbox, against the true oracle the agent
   never saw; the verdict is an **ed25519 signature over RFC-8785 canonical JSON** + an
   environment digest

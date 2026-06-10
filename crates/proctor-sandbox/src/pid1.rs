@@ -66,6 +66,21 @@ pub fn pid1_main(spec: &SandboxSpec) -> ! {
         std::process::exit(112);
     }
 
+    // allowlist mode: bind the in-ns forwarder listener BEFORE forking the
+    // agent so its backlog absorbs an early connect (no race), but spawn the
+    // accept thread only AFTER the fork (no fork-after-thread hazard). A bind
+    // failure fails safe — the agent simply has no egress (over-isolated).
+    let forwarder = match &spec.network {
+        crate::spec::NetSpec::Allowlist { .. } => match crate::proxy::bind_in_ns_forwarder() {
+            Ok(l) => Some(l),
+            Err(e) => {
+                eprintln!("proctor: forwarder bind failed, egress disabled: {e}");
+                None
+            }
+        },
+        crate::spec::NetSpec::Deny => None,
+    };
+
     let agent = match spawn_agent(spec) {
         Ok(pid) => pid,
         Err(e) => {
@@ -74,11 +89,10 @@ pub fn pid1_main(spec: &SandboxSpec) -> ! {
         }
     };
 
-    // allowlist mode: start the in-ns TCP->unix forwarder. Done here (in pid1,
-    // which is in the new pidns and can create threads) and AFTER the agent
-    // fork (so no fork-after-thread malloc-lock hazard).
-    if let crate::spec::NetSpec::Allowlist { proxy_sock } = &spec.network {
-        let _ = crate::proxy::start_in_ns_forwarder(proxy_sock);
+    if let (Some(listener), crate::spec::NetSpec::Allowlist { proxy_sock }) =
+        (forwarder, &spec.network)
+    {
+        crate::proxy::serve_in_ns_forwarder(listener, proxy_sock);
     }
 
     // reap everything; exit with the agent's code when it finishes

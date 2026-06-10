@@ -65,7 +65,7 @@ pub fn run(
     };
 
     // host proxy for allowlist mode (kept alive for the run's duration)
-    let _proxy = if let NetworkMode::Allowlist = policy.network.mode {
+    let proxy = if let NetworkMode::Allowlist = policy.network.mode {
         let sock = session.join("egress.sock");
         let allow: Vec<String> = policy
             .network
@@ -100,11 +100,15 @@ pub fn run(
         spec.host_proxy_sock = Some(session.join("egress.sock"));
     }
 
-    let outcome = run_sandboxed(&spec, &self_invoker()).context("agent sandbox run")?;
+    run_sandboxed(&spec, &self_invoker()).context("agent sandbox run")?;
 
-    // canonical artifact: the violations timeline
-    let violations_out = out.join("violations.jsonl");
-    let _ = std::fs::copy(session.join("violations.jsonl"), &violations_out);
+    // fold the proxy's egress denials into the timeline, then source the
+    // verdict's head/count from the final file (monitor records + proxy denials)
+    let (violations_head, violations_count) = finalize_violations(
+        proxy.as_ref(),
+        &session.join("violations.jsonl"),
+        &out.join("violations.jsonl"),
+    )?;
 
     // grade in a second sandbox vs. the true oracle (overlay upper holds the
     // agent's writes; merge lower+upper into a flat view for grading)
@@ -156,7 +160,7 @@ pub fn run(
         }
     };
 
-    let status = if outcome.violations_count > 0 {
+    let status = if violations_count > 0 {
         Status::Compromised
     } else {
         Status::Clean
@@ -168,8 +172,8 @@ pub fn run(
             .unwrap_or_else(|| "task".into()),
         pass: gr.pass,
         status,
-        violations_head: outcome.violations_head.clone(),
-        violations_count: outcome.violations_count,
+        violations_head,
+        violations_count,
         env_digest: digest,
         reward: gr.reward,
     }
@@ -231,7 +235,7 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
             proxy_sock: "/run/proctor/egress.sock".into(),
         },
     };
-    let _proxy = if let NetworkMode::Allowlist = plan.policy.network.mode {
+    let proxy = if let NetworkMode::Allowlist = plan.policy.network.mode {
         let sock = session.join("egress.sock");
         let allow: Vec<String> = plan
             .policy
@@ -275,11 +279,12 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
         spec.host_proxy_sock = Some(session.join("egress.sock"));
     }
 
-    let outcome = run_sandboxed(&spec, &self_invoker()).context("agent sandbox run")?;
-    let _ = std::fs::copy(
-        session.join("violations.jsonl"),
-        out.join("violations.jsonl"),
-    );
+    run_sandboxed(&spec, &self_invoker()).context("agent sandbox run")?;
+    let (violations_head, violations_count) = finalize_violations(
+        proxy.as_ref(),
+        &session.join("violations.jsonl"),
+        &out.join("violations.jsonl"),
+    )?;
 
     // grade: stage the agent's /app result + the oracle at /tests, run test.sh,
     // read the reward file the verifier wrote.
@@ -318,7 +323,7 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
 
     let signer = Signer::generate();
     std::fs::write(out.join("signing-seed.hex"), signer.to_seed_hex())?;
-    let status = if outcome.violations_count > 0 {
+    let status = if violations_count > 0 {
         Status::Compromised
     } else {
         Status::Clean
@@ -331,8 +336,8 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
             .into_owned(),
         pass: gr.pass,
         status,
-        violations_head: outcome.violations_head.clone(),
-        violations_count: outcome.violations_count,
+        violations_head,
+        violations_count,
         env_digest: digest,
         reward: gr.reward,
     }
@@ -341,6 +346,45 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
     Ok(verdict)
+}
+
+/// Fold the host proxy's DENIED egress decisions into the monitor's
+/// hash-chained timeline, copy it to the canonical output path, and return the
+/// final `(head, count)` for the verdict — so the signed artifact reflects both
+/// monitor-observed syscalls and proxy-refused egress in one chain.
+fn finalize_violations(
+    proxy: Option<&proctor_sandbox::proxy::HostProxy>,
+    session_violations: &Path,
+    out_violations: &Path,
+) -> Result<(String, u64)> {
+    use proctor_monitor::chain::{summary, ChainWriter, GENESIS};
+    use proctor_monitor::event::{Violation, ViolationKind};
+
+    if let Some(proxy) = proxy {
+        let denied: Vec<_> = proxy
+            .decisions()
+            .into_iter()
+            .filter(|d| !d.allowed)
+            .collect();
+        if !denied.is_empty() {
+            let (_, existing) = summary(session_violations)?;
+            let mut w = ChainWriter::open_append(session_violations)
+                .context("open violations for append")?;
+            for (i, d) in denied.iter().enumerate() {
+                w.append(&Violation {
+                    step: existing + 1 + i as u64,
+                    kind: ViolationKind::BlockedConnect,
+                    path: None,
+                    host: Some(d.target.clone()),
+                    pid: 0,
+                    syscall: "proxy_connect".into(),
+                })
+                .context("append proxy denial")?;
+            }
+        }
+    }
+    let _ = std::fs::copy(session_violations, out_violations);
+    Ok(summary(out_violations).unwrap_or((GENESIS.to_string(), 0)))
 }
 
 /// Compose lower + overlay-upper into a flat directory for grading.

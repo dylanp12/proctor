@@ -187,8 +187,6 @@ pub fn run_sandboxed(
                             ));
                             let ctx = proctor_monitor::classify::ClassifyCtx {
                                 mask_set: spec.masks.iter().cloned().collect(),
-                                net_deny_all: matches!(spec.network, crate::spec::NetSpec::Deny),
-                                net_allow: vec![],
                             };
                             let cwd = spec.agent_cwd.display().to_string();
                             let stop = monitor_stop.clone();

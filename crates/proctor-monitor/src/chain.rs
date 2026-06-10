@@ -87,6 +87,22 @@ impl ChainWriter {
         })
     }
 
+    /// Open an existing chain for appending, continuing from its current head
+    /// (verifying it first). Used to fold post-run records (e.g. proxy egress
+    /// denials) into the same tamper-evident timeline the monitor wrote.
+    pub fn open_append(path: &Path) -> Result<Self, ChainError> {
+        let head = if path.exists() {
+            verify_chain(path)?
+        } else {
+            GENESIS.to_string()
+        };
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        Ok(Self { file, head })
+    }
+
     pub fn append(&mut self, v: &Violation) -> Result<(), ChainError> {
         let chain = next_hash(&self.head, v);
         let rec = Record {
@@ -107,6 +123,22 @@ impl ChainWriter {
     pub fn head(&self) -> &str {
         &self.head
     }
+}
+
+/// The verified head hash and record count of a chain file; (GENESIS, 0) when
+/// the file is absent or empty. The signed verdict sources its
+/// violations_head / violations_count from this, so it reflects every record —
+/// monitor-observed syscalls and post-run proxy denials alike.
+pub fn summary(path: &Path) -> Result<(String, u64), ChainError> {
+    if !path.exists() {
+        return Ok((GENESIS.to_string(), 0));
+    }
+    let head = verify_chain(path)?;
+    let count = std::fs::read_to_string(path)?
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count() as u64;
+    Ok((head, count))
 }
 
 /// Recompute the chain from scratch; returns the head hash if intact.
@@ -205,6 +237,37 @@ mod tests {
             verify_chain(&path),
             Err(ChainError::Broken { line: 2 })
         ));
+    }
+
+    #[test]
+    fn open_append_continues_a_verifiable_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v.jsonl");
+        {
+            let mut w = ChainWriter::create(&path).unwrap();
+            w.append(&v(1, "/oracle/a")).unwrap();
+        }
+        // a second writer appends (e.g. proxy denials folded in after the run)
+        {
+            let mut w = ChainWriter::open_append(&path).unwrap();
+            w.append(&v(2, "/oracle/b")).unwrap();
+        }
+        let (head, count) = summary(&path).unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(verify_chain(&path).unwrap(), head); // single intact chain
+        assert_ne!(head, GENESIS);
+    }
+
+    #[test]
+    fn summary_of_absent_or_empty_is_genesis_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            summary(&dir.path().join("nope.jsonl")).unwrap(),
+            (GENESIS.to_string(), 0)
+        );
+        let empty = dir.path().join("empty.jsonl");
+        ChainWriter::create(&empty).unwrap();
+        assert_eq!(summary(&empty).unwrap(), (GENESIS.to_string(), 0));
     }
 
     #[test]

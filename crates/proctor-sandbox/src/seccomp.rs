@@ -11,10 +11,14 @@ use std::os::fd::{FromRawFd, OwnedFd};
 pub fn install_and_send() -> Result<(), String> {
     let mut ctx = ScmpFilterContext::new(ScmpAction::Allow).map_err(|e| e.to_string())?;
     ctx.set_ctl_nnp(true).map_err(|e| e.to_string())?;
-    for name in ["openat", "openat2", "connect"] {
-        let sc = ScmpSyscall::from_name(name).map_err(|e| e.to_string())?;
-        ctx.add_rule(ScmpAction::Notify, sc)
-            .map_err(|e| e.to_string())?;
+    // notify on the file-open and connect syscalls. `open` is included for
+    // hostile harnesses that issue the raw syscall (glibc routes open()->openat,
+    // but a crafted binary need not); it is skipped on arches without it.
+    for name in ["open", "openat", "openat2", "connect"] {
+        if let Ok(sc) = ScmpSyscall::from_name(name) {
+            ctx.add_rule(ScmpAction::Notify, sc)
+                .map_err(|e| e.to_string())?;
+        }
     }
     ctx.load().map_err(|e| e.to_string())?;
     let notify_fd = ctx.get_notify_fd().map_err(|e| e.to_string())?;

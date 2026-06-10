@@ -170,11 +170,19 @@ fn forward_bidir(mut reader: BufReader<UnixStream>, client: UnixStream, up: std:
     let _ = t.join();
 }
 
-/// Sandbox side: listen on 127.0.0.1:3128 and splice each TCP connection to the
-/// bind-mounted unix socket. Runs as a detached thread inside the netns.
-pub fn start_in_ns_forwarder(sock: &Path) -> Result<(), String> {
-    let listener =
-        std::net::TcpListener::bind("127.0.0.1:3128").map_err(|e| format!("bind 3128: {e}"))?;
+/// Sandbox side, step 1: bind the forwarder listener on 127.0.0.1:3128. No
+/// thread is spawned, so this is safe to call **before** the agent fork — the
+/// listening socket's backlog absorbs any early agent connect, closing the race
+/// where the agent reaches egress before the listener exists. std sockets are
+/// CLOEXEC, so the agent's exec drops its inherited copy automatically.
+pub fn bind_in_ns_forwarder() -> Result<std::net::TcpListener, String> {
+    std::net::TcpListener::bind("127.0.0.1:3128").map_err(|e| format!("bind 3128: {e}"))
+}
+
+/// Sandbox side, step 2: accept on the pre-bound listener and splice each TCP
+/// connection to the bind-mounted unix socket. Spawn this **after** the agent
+/// fork to avoid the fork-after-thread malloc-lock hazard.
+pub fn serve_in_ns_forwarder(listener: std::net::TcpListener, sock: &Path) {
     let sock = sock.to_path_buf();
     std::thread::spawn(move || {
         for conn in listener.incoming() {
@@ -195,5 +203,4 @@ pub fn start_in_ns_forwarder(sock: &Path) -> Result<(), String> {
             });
         }
     });
-    Ok(())
 }

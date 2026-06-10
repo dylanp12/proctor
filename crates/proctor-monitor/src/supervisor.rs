@@ -84,7 +84,12 @@ fn classify(step: u64, req: &ScmpNotifReq, ctx: &ClassifyCtx, cwd: &str) -> Opti
     let pid = req.pid as i32;
     let sc = req.data.syscall;
     let args = req.data.args;
-    if sc == libc::SYS_openat as i32 {
+    if sc == libc::SYS_open as i32 {
+        // open(pathname, flags, mode): path=args[0], flags=args[1]
+        let raw = classify::read_path(pid, args[0])?;
+        let abs = classify::absolutize(&raw, cwd);
+        classify::classify_open(step, pid, abs, args[1], ctx)
+    } else if sc == libc::SYS_openat as i32 {
         // openat(dirfd, pathname, flags, ...): path=args[1], flags=args[2]
         let raw = classify::read_path(pid, args[1])?;
         let abs = classify::absolutize(&raw, cwd);
@@ -97,7 +102,7 @@ fn classify(step: u64, req: &ScmpNotifReq, ctx: &ClassifyCtx, cwd: &str) -> Opti
         classify::classify_open(step, pid, abs, flags, ctx)
     } else if sc == libc::SYS_connect as i32 {
         // connect(fd, sockaddr*, addrlen): addr=args[1], len=args[2]
-        classify::classify_connect(step, pid, args[1], args[2], ctx)
+        classify::classify_connect(step, pid, args[1], args[2])
     } else {
         None
     }

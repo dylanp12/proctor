@@ -9,9 +9,6 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct ClassifyCtx {
     pub mask_set: BTreeSet<PathBuf>,
-    /// in deny mode: every connect is a violation; in allowlist: only non-allow
-    pub net_deny_all: bool,
-    pub net_allow: Vec<String>, // "host:port" — proxy enforces; this is belt
 }
 
 /// Read a NUL-terminated path from the target process memory at `addr`.
@@ -81,17 +78,15 @@ pub fn classify_open(
     })
 }
 
-/// Decode a sockaddr_in / sockaddr_in6 from target memory into "ip:port".
-pub fn classify_connect(
-    step: u64,
-    pid: i32,
-    addr_ptr: u64,
-    addrlen: u64,
-    ctx: &ClassifyCtx,
-) -> Option<Violation> {
+/// Decode a sockaddr_in / sockaddr_in6 from target memory and, if it is a
+/// **non-loopback** (egress) destination, return a violation. Loopback is never
+/// egress — in allowlist mode the agent's sanctioned hop is the in-ns proxy on
+/// 127.0.0.1:3128, which must not be logged as a violation; the proxy itself
+/// records the real host:port allow/deny decisions (folded into the timeline by
+/// the CLI). A direct non-loopback connect is a (netns-blocked) egress attempt.
+pub fn classify_connect(step: u64, pid: i32, addr_ptr: u64, addrlen: u64) -> Option<Violation> {
     let host = read_sockaddr(pid, addr_ptr, addrlen)?;
-    let blocked = ctx.net_deny_all || !ctx.net_allow.iter().any(|a| a == &host);
-    if !blocked {
+    if host_is_loopback(&host) {
         return None;
     }
     Some(Violation {
@@ -102,6 +97,21 @@ pub fn classify_connect(
         pid,
         syscall: "connect".into(),
     })
+}
+
+/// True if a "host:port" / "[ip6]:port" string addresses the loopback interface.
+fn host_is_loopback(hostport: &str) -> bool {
+    let ip = if let Some(rest) = hostport.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else {
+        hostport
+            .rsplit_once(':')
+            .map(|(h, _)| h)
+            .unwrap_or(hostport)
+    };
+    ip.parse::<std::net::IpAddr>()
+        .map(|a| a.is_loopback())
+        .unwrap_or(false)
 }
 
 fn read_sockaddr(pid: i32, addr: u64, len: u64) -> Option<String> {
@@ -138,8 +148,6 @@ mod tests {
     fn ctx(masks: &[&str]) -> ClassifyCtx {
         ClassifyCtx {
             mask_set: masks.iter().map(PathBuf::from).collect(),
-            net_deny_all: true,
-            net_allow: vec![],
         }
     }
 
@@ -168,5 +176,14 @@ mod tests {
         let create = classify_open(3, 9, "/oracle/a".into(), libc::O_CREAT as u64, &c).unwrap();
         assert_eq!(create.kind, ViolationKind::MaskedWrite);
         assert!(classify_open(4, 9, "/workspace/ok".into(), 0, &c).is_none());
+    }
+
+    #[test]
+    fn loopback_is_not_egress() {
+        assert!(host_is_loopback("127.0.0.1:3128"));
+        assert!(host_is_loopback("127.0.0.5:80"));
+        assert!(host_is_loopback("[::1]:443"));
+        assert!(!host_is_loopback("1.2.3.4:443"));
+        assert!(!host_is_loopback("[2606:4700::1111]:443"));
     }
 }
