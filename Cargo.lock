@@ -483,6 +483,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "proctor-adapter-swebench"
+version = "0.1.0"
+dependencies = [
+ "proctor-policy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "proctor-adapter-tb"
 version = "0.1.0"
 dependencies = [

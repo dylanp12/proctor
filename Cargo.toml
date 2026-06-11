@@ -7,6 +7,7 @@ members = [
     "crates/proctor-grader",
     "crates/proctor-verdict",
     "crates/proctor-adapter-tb",
+    "crates/proctor-adapter-swebench",
     "crates/proctor-cli",
 ]
 
@@ -23,6 +24,7 @@ proctor-sandbox = { path = "crates/proctor-sandbox" }
 proctor-grader = { path = "crates/proctor-grader" }
 proctor-verdict = { path = "crates/proctor-verdict" }
 proctor-adapter-tb = { path = "crates/proctor-adapter-tb" }
+proctor-adapter-swebench = { path = "crates/proctor-adapter-swebench" }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
