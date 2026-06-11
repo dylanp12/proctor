@@ -2,6 +2,7 @@
 //! oracle and the agent's resulting workspace, but the agent is not present.
 //! v1 supports two result protocols: process exit code, or a reward file.
 
+use proctor_sandbox::proxy::HostProxy;
 use proctor_sandbox::spawn::{run_sandboxed, InitInvoker, SandboxError};
 use proctor_sandbox::spec::{BindMount, NetSpec, RootfsSpec, SandboxSpec};
 use std::path::PathBuf;
@@ -15,6 +16,18 @@ pub enum GradeProtocol {
     RewardFile { path: PathBuf },
 }
 
+/// Network available to the grade command. The grader is trusted (it runs the
+/// operator's test harness), so it may use Host; the agent never can.
+#[derive(Debug, Clone)]
+pub enum GraderNet {
+    /// empty network namespace — no egress (default)
+    Deny,
+    /// share the host's network — full egress (for test bootstraps: uv/pip/apt)
+    Host,
+    /// reach only these "host:port" targets, through the grader's CONNECT proxy
+    Allowlist(Vec<String>),
+}
+
 #[derive(Debug, Clone)]
 pub struct GradeRequest {
     pub workspace: PathBuf,       // host path: the agent's resulting workspace
@@ -25,6 +38,7 @@ pub struct GradeRequest {
     pub protocol: GradeProtocol,
     pub session: PathBuf,
     pub wall_time_secs: u64,
+    pub network: GraderNet,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,12 +70,30 @@ pub fn grade(req: &GradeRequest, invoker: &InitInvoker) -> Result<GradeResult, G
     let logs_host = req.session.join("grade_logs");
     std::fs::create_dir_all(&logs_host)?;
 
+    // translate the grader network mode; keep the proxy (if any) alive for the run
+    let proxy_sock = req.session.join("egress.sock");
+    let (net_spec, host_proxy_sock, _proxy) = match &req.network {
+        GraderNet::Deny => (NetSpec::Deny, None, None),
+        GraderNet::Host => (NetSpec::Host, None, None),
+        GraderNet::Allowlist(hosts) => {
+            let p = HostProxy::start(&proxy_sock, hosts.clone())
+                .map_err(|e| GradeError::Reward(format!("start egress proxy: {e}")))?;
+            (
+                NetSpec::Allowlist {
+                    proxy_sock: PathBuf::from("/run/proctor/egress.sock"),
+                },
+                Some(proxy_sock.clone()),
+                Some(p),
+            )
+        }
+    };
+
     let spec = SandboxSpec {
         rootfs: RootfsSpec::HostSystem,
         workspace_lower: Some(lower),
         mount_at: req.workspace_mount.clone(),
-        masks: vec![],          // grader may see everything
-        network: NetSpec::Deny, // grading is offline in v1
+        masks: vec![], // grader may see everything
+        network: net_spec,
         env: vec![("PATH".into(), "/usr/bin:/bin:/usr/local/bin".into())],
         agent_cmd: req.grade_cmd.clone(),
         agent_cwd: req.workspace_mount.clone(),
@@ -71,7 +103,7 @@ pub fn grade(req: &GradeRequest, invoker: &InitInvoker) -> Result<GradeResult, G
         memory_bytes: 2 * 1024 * 1024 * 1024,
         pivot: true,
         seccomp: false, // no audit needed for the grader
-        host_proxy_sock: None,
+        host_proxy_sock,
         extra_binds: vec![
             BindMount {
                 host: req.oracle.clone(),

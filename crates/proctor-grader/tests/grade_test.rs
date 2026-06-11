@@ -1,4 +1,4 @@
-use proctor_grader::{grade, GradeProtocol, GradeRequest, GradeResult};
+use proctor_grader::{grade, GradeProtocol, GradeRequest, GradeResult, GraderNet};
 use proctor_sandbox::require_sandbox;
 use proctor_sandbox::spawn::InitInvoker;
 use std::path::PathBuf;
@@ -33,6 +33,7 @@ fn exit_code_protocol_pass_and_fail() {
         protocol: GradeProtocol::ExitCode,
         session: d.path().join("grade-session-pass"),
         wall_time_secs: 30,
+        network: GraderNet::Deny,
     };
     assert!(matches!(
         grade(&req, &invoker()).unwrap(),
@@ -67,6 +68,7 @@ fn reward_file_protocol_reads_json_reward() {
         },
         session: d.path().join("grade-session-reward"),
         wall_time_secs: 30,
+        network: GraderNet::Deny,
     };
     let r = grade(&req, &invoker()).unwrap();
     assert!(r.pass);
@@ -90,6 +92,7 @@ fn reward_file_protocol_falls_back_to_reward_txt() {
         },
         session: d.path().join("grade-session-txt"),
         wall_time_secs: 30,
+        network: GraderNet::Deny,
     };
     let r = grade(&req, &invoker()).unwrap();
     assert!(r.pass);

@@ -131,6 +131,7 @@ pub fn run(
             protocol: GradeProtocol::ExitCode,
             session: out.join("grade-session"),
             wall_time_secs: policy.limits.wall_time_secs,
+            network: proctor_grader::GraderNet::Deny,
         },
         &self_invoker(),
     )
@@ -307,6 +308,7 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
             },
             session: out.join("grade-session"),
             wall_time_secs: plan.policy.limits.wall_time_secs,
+            network: proctor_grader::GraderNet::Deny,
         },
         &self_invoker(),
     )
