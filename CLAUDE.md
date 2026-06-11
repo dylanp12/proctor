@@ -13,7 +13,11 @@ plan: [`docs/superpowers/plans/2026-06-09-proctor-v1.md`](docs/superpowers/plans
 usage: [`docs/usage.md`](docs/usage.md). A real Terminal-Bench 2 task now runs end-to-end
 (reference solution → clean pass; oracle read → blocked + logged): see
 [`docs/reports/2026-06-10-real-task-log-summary.md`](docs/reports/2026-06-10-real-task-log-summary.md)
-(reproduce with `corpus/real-tasks/run-report.sh`).
+(reproduce with `corpus/real-tasks/run-report.sh`). A real SWE-bench instance also runs
+(`proctor run-swebench`): git-history mining for the fix commit is unreachable, staged
+answers masked — see
+[`docs/reports/2026-06-10-real-task-swebench.md`](docs/reports/2026-06-10-real-task-swebench.md)
+(reproduce with `corpus/real-tasks/run-swebench-report.sh`).
 **Working name:** Proctor (changeable). **Language:** Rust. **Platform:** Linux-only (v1).
 
 > **Verified-record note (do not regress):** the headline numbers are "1,000+

@@ -16,3 +16,5 @@
 
 # regenerable real-task report artifacts (run-report.sh output)
 corpus/real-tasks/out/
+corpus/real-tasks/swebench-out/
+corpus/real-tasks/.swebench-cache/
