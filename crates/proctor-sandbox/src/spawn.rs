@@ -85,6 +85,16 @@ pub fn run_sandboxed(
     let sec_fd = sec_child.as_raw_fd();
     let ack_fd = ack_r.as_raw_fd();
 
+    // network namespace is created for Deny/Allowlist; Host shares the host's net
+    let mut clone_flags = nix::sched::CloneFlags::CLONE_NEWUSER
+        | nix::sched::CloneFlags::CLONE_NEWNS
+        | nix::sched::CloneFlags::CLONE_NEWPID
+        | nix::sched::CloneFlags::CLONE_NEWIPC
+        | nix::sched::CloneFlags::CLONE_NEWUTS;
+    if !matches!(spec.network, crate::spec::NetSpec::Host) {
+        clone_flags |= nix::sched::CloneFlags::CLONE_NEWNET;
+    }
+
     let mut cmd = Command::new(&invoker.program);
     cmd.args(&invoker.prefix_args)
         .arg("--spec")
@@ -107,16 +117,8 @@ pub fn run_sandboxed(
                     return Err(std::io::Error::last_os_error());
                 }
             }
-            // 3. enter the namespaces
-            nix::sched::unshare(
-                nix::sched::CloneFlags::CLONE_NEWUSER
-                    | nix::sched::CloneFlags::CLONE_NEWNS
-                    | nix::sched::CloneFlags::CLONE_NEWPID
-                    | nix::sched::CloneFlags::CLONE_NEWNET
-                    | nix::sched::CloneFlags::CLONE_NEWIPC
-                    | nix::sched::CloneFlags::CLONE_NEWUTS,
-            )
-            .map_err(std::io::Error::from)?;
+            // 3. enter the namespaces (net namespace omitted in Host mode)
+            nix::sched::unshare(clone_flags).map_err(std::io::Error::from)?;
             // 4. self-map root (the only mapping an unprivileged process may write)
             write_proc_self("setgroups", b"deny")?;
             write_proc_self("gid_map", &gid_map)?;

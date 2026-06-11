@@ -18,6 +18,8 @@ pub enum NetSpec {
     Deny,
     /// empty netns + unix-socket CONNECT proxy bridged at proxy_sock
     Allowlist { proxy_sock: PathBuf },
+    /// no network namespace — share the host's network (trusted grader only)
+    Host,
 }
 
 /// A host directory bound into the sandbox at an absolute path. Used by the

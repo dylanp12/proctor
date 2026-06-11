@@ -78,7 +78,8 @@ pub fn pid1_main(spec: &SandboxSpec) -> ! {
                 None
             }
         },
-        crate::spec::NetSpec::Deny => None,
+        // Deny: empty netns, no forwarder. Host: shares the host net, no forwarder.
+        crate::spec::NetSpec::Deny | crate::spec::NetSpec::Host => None,
     };
 
     let agent = match spawn_agent(spec) {

@@ -5,7 +5,11 @@
 
 use crate::spec::NetSpec;
 
-pub fn setup(_net: &NetSpec) -> Result<(), String> {
+pub fn setup(net: &NetSpec) -> Result<(), String> {
+    // Host shares the host's network namespace; do not touch host interfaces.
+    if matches!(net, NetSpec::Host) {
+        return Ok(());
+    }
     bring_loopback_up().map_err(|e| format!("lo up: {e}"))
 }
 
