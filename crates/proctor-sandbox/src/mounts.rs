@@ -121,21 +121,52 @@ pub fn build_and_pivot(spec: &SandboxSpec) -> Result<(), MountError> {
         }
     }
 
-    // masks: empty read-only tmpfs over each forbidden path
+    // masks: hide each forbidden path. A path that already exists in the
+    // workspace (e.g. a SWE-bench test file in the materialized repo) may be a
+    // regular FILE — tmpfs needs a directory mountpoint, so we bind an empty
+    // read-only file over a file, and use an empty read-only tmpfs over a
+    // directory / absent path. Either way the open is intercepted + logged.
+    let empty_mask = spec.session.join(".proctor-empty-mask");
+    let _ = std::fs::File::create(&empty_mask);
     for mask in &spec.masks {
         let target = join_abs(&newroot, mask);
-        mkdir(&target)?;
-        m(
-            "tmpfs-mask",
-            &target,
-            mount(
-                Some("tmpfs"),
+        if target.is_file() {
+            m(
+                "bind-file-mask",
                 &target,
-                Some("tmpfs"),
-                MsFlags::MS_RDONLY,
-                None::<&str>,
-            ),
-        )?;
+                mount(
+                    Some(empty_mask.as_path()),
+                    &target,
+                    None::<&str>,
+                    MsFlags::MS_BIND,
+                    None::<&str>,
+                ),
+            )?;
+            m(
+                "bind-file-mask-ro",
+                &target,
+                mount(
+                    None::<&str>,
+                    &target,
+                    None::<&str>,
+                    MsFlags::MS_REMOUNT | MsFlags::MS_BIND | MsFlags::MS_RDONLY,
+                    None::<&str>,
+                ),
+            )?;
+        } else {
+            mkdir(&target)?;
+            m(
+                "tmpfs-mask",
+                &target,
+                mount(
+                    Some("tmpfs"),
+                    &target,
+                    Some("tmpfs"),
+                    MsFlags::MS_RDONLY,
+                    None::<&str>,
+                ),
+            )?;
+        }
     }
 
     // /dev (minimal), /tmp, /run/proctor

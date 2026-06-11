@@ -42,6 +42,18 @@ enum Cmd {
         #[arg(long)]
         image: bool,
     },
+    /// Run a SWE-bench instance under Proctor (repo at base commit, fix history
+    /// stripped, answer artifacts masked). Does not grade in v1.
+    RunSwebench {
+        #[arg(long)]
+        instance: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
+        agent: String,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Verify a verdict's signature against a public key.
     Verify {
         #[arg(long)]
@@ -97,6 +109,24 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("proctor: run-tb failed: {e:#}");
+                1
+            }
+        },
+        Cmd::RunSwebench {
+            instance,
+            repo,
+            agent,
+            out,
+        } => match run::run_swebench(&instance, &repo, &agent, &out) {
+            Ok(v) => {
+                println!(
+                    "verdict: status={:?} violations={}",
+                    v.body.status, v.body.violations_count
+                );
+                0
+            }
+            Err(e) => {
+                eprintln!("proctor: run-swebench failed: {e:#}");
                 1
             }
         },

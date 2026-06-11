@@ -511,6 +511,7 @@ dependencies = [
  "anyhow",
  "clap",
  "hex",
+ "proctor-adapter-swebench",
  "proctor-adapter-tb",
  "proctor-grader",
  "proctor-monitor",
