@@ -1,0 +1,127 @@
+name: "Proctor run"
+description: "Run a benchmark task under Proctor isolation; verify and upload the signed bundle."
+inputs:
+  run-args:
+    description: "Args passed to `proctor` (e.g. 'run --task ./t --agent \"sh /workspace/solve.sh\" --policy ./p.yaml'). Do NOT include --out; the action sets it."
+    required: true
+  out:
+    description: "Output directory for verdict.json / violations.jsonl / bundle.json."
+    default: "proctor-out"
+  signing-seed:
+    description: "ed25519 seed hex (set from a secret). Empty => an ephemeral key is minted."
+    default: ""
+  pubkey:
+    description: "If set, verify-bundle also checks the bundle was signed by this public key."
+    default: ""
+  artifact-name:
+    description: "Name of the uploaded bundle artifact."
+    default: "proctor-bundle"
+  upload:
+    description: "Upload the bundle as a build artifact."
+    default: "true"
+  proctor-ref:
+    description: "If set, clone dylanp12/proctor@<ref> and build it; else build from working-directory."
+    default: ""
+  working-directory:
+    description: "Path to the proctor source checkout (used when proctor-ref is empty)."
+    default: "."
+outputs:
+  pass:
+    description: "verdict.pass (true/false)."
+    value: ${{ steps.meta.outputs.pass }}
+  verdict-status:
+    description: "verdict.status (clean/compromised)."
+    value: ${{ steps.meta.outputs.verdict-status }}
+  violations:
+    description: "verdict.violations_count."
+    value: ${{ steps.meta.outputs.violations }}
+  bundle-path:
+    description: "Path to the produced bundle.json."
+    value: ${{ steps.meta.outputs.bundle-path }}
+runs:
+  using: "composite"
+  steps:
+    - name: host deps
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y libseccomp-dev
+        # ubuntu restricts unprivileged userns via apparmor; the sandbox needs it
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+    - name: rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+    - name: checkout proctor (proctor-ref)
+      if: ${{ inputs.proctor-ref != '' }}
+      uses: actions/checkout@v5
+      with:
+        repository: dylanp12/proctor
+        ref: ${{ inputs.proctor-ref }}
+        path: .proctor-src
+    - name: resolve source path
+      shell: bash
+      env:
+        PROCTOR_REF: ${{ inputs.proctor-ref }}
+        WORKDIR: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        if [ -n "$PROCTOR_REF" ]; then
+          echo "PROCTOR_SRC=$GITHUB_WORKSPACE/.proctor-src" >> "$GITHUB_ENV"
+        else
+          echo "PROCTOR_SRC=$(cd "$WORKDIR" && pwd)" >> "$GITHUB_ENV"
+        fi
+    - name: build proctor
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$PROCTOR_SRC"
+        ./scripts/dev-setup.sh
+        cargo build --release -p proctor-cli
+        echo "PROCTOR_BIN=$PROCTOR_SRC/target/release/proctor" >> "$GITHUB_ENV"
+    - name: run proctor
+      shell: bash
+      env:
+        RUN_ARGS: ${{ inputs.run-args }}
+        OUT: ${{ inputs.out }}
+        SEED_INPUT: ${{ inputs.signing-seed }}
+      run: |
+        set -euo pipefail
+        if [ -n "$SEED_INPUT" ]; then export PROCTOR_SIGNING_SEED="$SEED_INPUT"; fi
+        # eval so a quoted multi-word --agent "…" in RUN_ARGS is not word-split.
+        # RUN_ARGS is a trusted CI input authored by the workflow, not user data.
+        eval "\"$PROCTOR_BIN\" $RUN_ARGS --out \"$OUT\""
+    - name: verify bundle
+      shell: bash
+      env:
+        OUT: ${{ inputs.out }}
+        PUBKEY: ${{ inputs.pubkey }}
+      run: |
+        set -euo pipefail
+        args=(verify-bundle --bundle "$OUT/bundle.json")
+        if [ -n "$PUBKEY" ]; then args+=(--pubkey "$PUBKEY"); fi
+        "$PROCTOR_BIN" "${args[@]}"
+    - name: read verdict outputs
+      id: meta
+      shell: bash
+      env:
+        OUT: ${{ inputs.out }}
+      run: |
+        set -euo pipefail
+        v="$OUT/verdict.json"
+        {
+          echo "pass=$(jq -r '.pass' "$v")"
+          echo "verdict-status=$(jq -r '.status' "$v")"
+          echo "violations=$(jq -r '.violations_count' "$v")"
+          echo "bundle-path=$OUT/bundle.json"
+        } >> "$GITHUB_OUTPUT"
+    - name: upload bundle
+      if: ${{ inputs.upload == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        # explicit files only — never the whole out/ (it may hold signing-seed.hex)
+        path: |
+          ${{ inputs.out }}/bundle.json
+          ${{ inputs.out }}/verdict.json
+          ${{ inputs.out }}/violations.jsonl
+        if-no-files-found: error
