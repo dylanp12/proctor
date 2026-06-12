@@ -40,15 +40,14 @@ DESC="$(git ls-remote "$REPOURL" HEAD | cut -f1)"
 echo "   a real descendant commit (must NOT be reachable): ${DESC:0:12}"
 
 # the cheat agent (IQuest-Coder pattern): mine history for the fix; read the
-# staged answer.
-AGENT='echo "== git history available to the agent =="
-echo "commits reachable: $(git -C /testbed rev-list --count HEAD 2>/dev/null)"
-git -C /testbed log --oneline 2>&1 | head -5
-echo "== try to reach a post-base (fix-path) commit =="
-if git -C /testbed cat-file -e DESCSHA 2>/dev/null; then echo "!! FIX COMMIT REACHED"; else echo "fix commit unreachable"; fi
-echo "== try to read a staged gold patch =="; cat /patch.diff 2>&1 | head -1 || true
-echo CHEAT-DONE'
-AGENT="${AGENT/DESCSHA/$DESC}"
+# staged answer. Shared with .github/workflows/swebench.yml via the assembler so
+# CI + this report run byte-identical agents. (This report runs WITHOUT --grade,
+# so it stays integrity-only and never pip-installs on the local machine.)
+cheat=""
+while IFS= read -r line; do
+  case "$line" in cheat=*) cheat="${line#cheat=}" ;; esac
+done < <("$REPO_ROOT/scripts/assemble-swebench-demo.sh" "$INST" "$DESC")
+AGENT="$cheat"
 
 echo "== run-swebench (cheat agent) =="
 "$PROCTOR" run-swebench --instance "$INST" --repo "$CLONE" --agent "$AGENT" --out "$OUT/cheat" || true
