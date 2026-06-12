@@ -33,6 +33,14 @@ pub struct Instance {
     pub test_patch: String,
     #[serde(default)]
     pub patch: String,
+    #[serde(default, rename = "FAIL_TO_PASS")]
+    pub fail_to_pass: Vec<String>,
+    #[serde(default, rename = "PASS_TO_PASS")]
+    pub pass_to_pass: Vec<String>,
+    #[serde(default)]
+    pub install_cmd: Option<String>,
+    #[serde(default)]
+    pub test_cmd: Option<String>,
 }
 
 #[derive(Debug)]
@@ -42,6 +50,11 @@ pub struct SwePlan {
     pub workdir: PathBuf,
     pub base_commit: String,
     pub instance_id: String,
+    pub test_patch: String,
+    pub fail_to_pass: Vec<String>,
+    pub pass_to_pass: Vec<String>,
+    pub install_cmd: String,
+    pub test_cmd: String,
 }
 
 /// Collect the file paths a unified diff targets, from its `+++ b/<path>`
@@ -65,6 +78,24 @@ pub fn test_paths(diff: &str) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+/// Build the SWE-bench grade script: apply the test patch (the oracle the agent
+/// never saw), install deps, run the FAIL_TO_PASS+PASS_TO_PASS ids, and write a
+/// reward (1 iff the test run exits 0 — SWE-bench is all-or-nothing). Runs in the
+/// grader sandbox with /testbed = the agent's merged workspace and /oracle = the
+/// test patch + test_ids.
+pub fn grade_script(install_cmd: &str, test_cmd: &str) -> String {
+    format!(
+        "set -e\n\
+cd /testbed\n\
+git apply /oracle/test_patch.diff\n\
+{install_cmd} >/tmp/install.log 2>&1 || {{ echo 'install step failed'; tail -20 /tmp/install.log; }}\n\
+mkdir -p /logs/verifier\n\
+ids=\"$(tr '\\n' ' ' < /oracle/test_ids)\"\n\
+if {test_cmd} $ids; then printf '{{\"reward\":1}}\\n' > /logs/verifier/reward.json; \
+else printf '{{\"reward\":0}}\\n' > /logs/verifier/reward.json; fi\n"
+    )
 }
 
 /// Parse a SWE-bench instance from JSON and map it to a plan.
@@ -120,6 +151,17 @@ pub fn load_instance(inst: &Instance) -> Result<SwePlan, AdapterError> {
         workdir,
         base_commit: inst.base_commit.clone(),
         instance_id: inst.instance_id.clone(),
+        test_patch: inst.test_patch.clone(),
+        fail_to_pass: inst.fail_to_pass.clone(),
+        pass_to_pass: inst.pass_to_pass.clone(),
+        install_cmd: inst
+            .install_cmd
+            .clone()
+            .unwrap_or_else(|| "python -m pip install -e .".into()),
+        test_cmd: inst
+            .test_cmd
+            .clone()
+            .unwrap_or_else(|| "python -m pytest -p no:cacheprovider -q".into()),
     })
 }
 
@@ -168,6 +210,7 @@ new file mode 100644
         "test_patch": "--- a/tests/test_requests.py\n+++ b/tests/test_requests.py\n@@ -1 +1 @@\n+assert True\n",
         "patch": "--- a/requests/sessions.py\n+++ b/requests/sessions.py\n",
         "FAIL_TO_PASS": ["tests/test_requests.py::test_x"],
+        "PASS_TO_PASS": ["tests/test_requests.py::test_y"],
         "version": "2.9"
     }"#;
 
@@ -190,6 +233,38 @@ new file mode 100644
         assert!(reads.contains(&PathBuf::from("/patch.diff")), "{reads:?}");
         assert_eq!(plan.policy.network.mode, proctor_policy::NetworkMode::Deny);
         assert_eq!(plan.policy.workspace.mount_at, PathBuf::from("/testbed"));
+    }
+
+    #[test]
+    fn plan_carries_test_ids_and_default_commands() {
+        let plan = from_json(INSTANCE).unwrap();
+        assert_eq!(plan.fail_to_pass, vec!["tests/test_requests.py::test_x"]);
+        assert_eq!(plan.pass_to_pass, vec!["tests/test_requests.py::test_y"]);
+        assert_eq!(plan.install_cmd, "python -m pip install -e .");
+        assert_eq!(plan.test_cmd, "python -m pytest -p no:cacheprovider -q");
+        assert!(plan.test_patch.contains("test_requests.py"));
+    }
+
+    #[test]
+    fn explicit_commands_override_defaults() {
+        let j = INSTANCE.replace(
+            r#""version": "2.9""#,
+            r#""version": "2.9", "install_cmd": "make dev", "test_cmd": "tox""#,
+        );
+        let plan = from_json(&j).unwrap();
+        assert_eq!(plan.install_cmd, "make dev");
+        assert_eq!(plan.test_cmd, "tox");
+    }
+
+    #[test]
+    fn grade_script_has_apply_install_test_and_reward_branches() {
+        let s = grade_script("python -m pip install -e .", "python -m pytest -q");
+        assert!(s.contains("git apply /oracle/test_patch.diff"), "{s}");
+        assert!(s.contains("python -m pip install -e ."), "{s}");
+        assert!(s.contains("python -m pytest -q"), "{s}");
+        assert!(s.contains("/oracle/test_ids"), "{s}");
+        assert!(s.contains(r#"{"reward":1}"#), "{s}");
+        assert!(s.contains(r#"{"reward":0}"#), "{s}");
     }
 
     #[test]
