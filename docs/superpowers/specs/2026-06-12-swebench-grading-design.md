@@ -1,8 +1,18 @@
 # SWE-bench grading under Proctor — Design Spec
 
 **Date:** 2026-06-12
-**Status:** Draft for review
+**Status:** Implemented — see outcome note.
 **Sub-project:** #6 (stretch) of the productionization program — the last item.
+
+> **Outcome (2026-06-12):** the grading *pipeline* ships and runs a real instance
+> in CI (isolated agent → isolated grader applies the hidden test_patch, installs
+> over the Host network, runs the real test, signs the reward). Empirically, a
+> faithful *resolved/unresolved* grade for `psf__requests-2317` needs SWE-bench's
+> pinned per-instance Docker env — in a generic Python 3.9 runner the FAIL_TO_PASS
+> bug does not reproduce — which is exactly this spec's "not the full dataset
+> harness" non-goal. The reliable, reproducible signal is the **integrity verdict**
+> (the git-mining cheat is blocked + `compromised`). Full record:
+> [`docs/reports/2026-06-12-swebench-grading.md`](../../reports/2026-06-12-swebench-grading.md).
 
 ## Summary
 

@@ -50,8 +50,14 @@ network / IPC / UTS namespaces, fully unprivileged:
   *which operator* produced the result
 
 The design goal is a *general, benchmark-agnostic standard*. Terminal-Bench (Harbor
-format) is the first adapter (`proctor run-tb`); SWE-bench and RL-training integrations
-follow.
+format) is the first adapter (`proctor run-tb`); a SWE-bench adapter
+(`proctor run-swebench`) materializes the repo at the base commit with fix history
+stripped, and `--grade` runs the instance's tests through the isolated grader over the
+Host network on CI — see the
+[grading report](docs/reports/2026-06-12-swebench-grading.md), which also documents
+the boundary: faithful per-instance resolved-grading needs SWE-bench's pinned
+environment, while Proctor's reproducible signal is the tamper-evident integrity
+verdict (the git-mining cheat is blocked + flagged `compromised`).
 
 ### Honest claim scope
 

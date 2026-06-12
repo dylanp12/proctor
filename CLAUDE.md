@@ -18,6 +18,15 @@ usage: [`docs/usage.md`](docs/usage.md). A real Terminal-Bench 2 task now runs e
 answers masked — see
 [`docs/reports/2026-06-10-real-task-swebench.md`](docs/reports/2026-06-10-real-task-swebench.md)
 (reproduce with `corpus/real-tasks/run-swebench-report.sh`).
+**Productionization (2026-06-11/12) — all 6 sub-projects done:** (1) SWE-bench adapter,
+(2) grader network (`GraderNet::Host`), (3) signed run-bundle + `verify-bundle`, (4)
+composite `action.yml` + dogfood `demo.yml` (CI now green on `ubuntu-24.04` — it never
+was before; proc-mount fix), (5) release & packaging (**v0.1.0** prebuilt binary +
+`proctor-version` action fast-path), (6) `proctor run-swebench --grade` runs a real
+instance's tests through the isolated grader over the Host network in CI — the grading
+*pipeline* + integrity verdict ship; faithful per-instance resolved-grading needs
+SWE-bench's pinned env (non-goal), see
+[`docs/reports/2026-06-12-swebench-grading.md`](docs/reports/2026-06-12-swebench-grading.md).
 **Working name:** Proctor (changeable). **Language:** Rust. **Platform:** Linux-only (v1).
 
 > **Verified-record note (do not regress):** the headline numbers are "1,000+
