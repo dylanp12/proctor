@@ -13,6 +13,7 @@ pub mod ipc;
 pub mod materialize;
 pub mod mounts;
 pub mod net;
+pub mod ociroot;
 pub mod pid1;
 pub mod proxy;
 pub mod seccomp;
