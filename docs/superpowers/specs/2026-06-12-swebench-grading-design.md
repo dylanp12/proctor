@@ -36,10 +36,15 @@ already `merge_overlay(lower, ws_upper)` to get the agent's result and call
 
 - `run-swebench` grades: after the agent runs, merge its `/testbed`, apply the
   instance's `test_patch` as the oracle, install deps over `GraderNet::Host`, run
-  the FAIL_TO_PASS + PASS_TO_PASS test IDs, and set `verdict.pass` / `reward`.
-- Pass criterion: **the test run exits 0** (all selected tests pass) ⇒ reward 1;
-  otherwise reward 0. (SWE-bench is all-or-nothing: every FAIL_TO_PASS must pass
-  and every PASS_TO_PASS must stay passing.)
+  the **FAIL_TO_PASS** test IDs (the SWE-bench "resolved" signal), and set
+  `verdict.pass` / `reward`.
+- Pass criterion: **the test run exits 0** (all FAIL_TO_PASS pass) ⇒ reward 1;
+  otherwise reward 0. (CONVERGENCE NOTE: the gate is FAIL_TO_PASS — the
+  fix-relevant tests. Full PASS_TO_PASS regression-guarding needs SWE-bench's
+  exact pinned test env; in a generic CI runner env 2/133 requests auth tests are
+  environment-sensitive — local `pytest-httpbin` makes "off-host" redirects
+  same-host — and would fail for *every* agent, giving no signal. The grading
+  report records the observed PASS_TO_PASS result transparently.)
 - `proctor-adapter-swebench::Instance` carries `FAIL_TO_PASS`, `PASS_TO_PASS`,
   and optional `install_cmd` / `test_cmd` (pytest defaults).
 - Enrich the vendored `psf__requests-2317.json` with the **authoritative**
@@ -101,7 +106,8 @@ After the agent run + violation finalize, when `--grade` is passed and
 1. `merge_overlay(&lower, &session.join("ws_upper"), &merged)` → agent's `/testbed`.
 2. Build the **oracle dir** `out/swebench-oracle/`:
    - `test_patch.diff` ← `plan.test_patch`
-   - `test_ids` ← `fail_to_pass` ++ `pass_to_pass`, one per line
+   - `test_ids` ← `fail_to_pass`, one per line (the resolved signal; see the
+     convergence note on PASS_TO_PASS env-fidelity)
    - `grade.sh` ← generated (below)
 3. `grade(&GradeRequest {`
    `workspace: merged, workspace_mount: "/testbed",`
