@@ -34,6 +34,7 @@ fn exit_code_protocol_pass_and_fail() {
         session: d.path().join("grade-session-pass"),
         wall_time_secs: 30,
         network: GraderNet::Deny,
+        rootfs: proctor_sandbox::spec::RootfsSpec::HostSystem,
     };
     assert!(matches!(
         grade(&req, &invoker()).unwrap(),
@@ -69,6 +70,7 @@ fn reward_file_protocol_reads_json_reward() {
         session: d.path().join("grade-session-reward"),
         wall_time_secs: 30,
         network: GraderNet::Deny,
+        rootfs: proctor_sandbox::spec::RootfsSpec::HostSystem,
     };
     let r = grade(&req, &invoker()).unwrap();
     assert!(r.pass);
@@ -93,6 +95,7 @@ fn reward_file_protocol_falls_back_to_reward_txt() {
         session: d.path().join("grade-session-txt"),
         wall_time_secs: 30,
         network: GraderNet::Deny,
+        rootfs: proctor_sandbox::spec::RootfsSpec::HostSystem,
     };
     let r = grade(&req, &invoker()).unwrap();
     assert!(r.pass);

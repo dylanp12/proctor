@@ -44,6 +44,7 @@ fn req(d: &Path, net: GraderNet, cmd: &str, tag: &str) -> GradeRequest {
         session: d.join(tag),
         wall_time_secs: 30,
         network: net,
+        rootfs: proctor_sandbox::spec::RootfsSpec::HostSystem,
     }
 }
 

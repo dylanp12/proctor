@@ -45,6 +45,9 @@ pub struct Instance {
     /// FAIL_TO_PASS); lets an instance pin the deterministic fix-validating tests
     #[serde(default)]
     pub grade_tests: Vec<String>,
+    /// published per-instance image ref (for `run-swebench --image`)
+    #[serde(default)]
+    pub image: Option<String>,
 }
 
 #[derive(Debug)]
@@ -61,6 +64,8 @@ pub struct SwePlan {
     pub test_cmd: String,
     /// the tests the verdict is gated on (FAIL_TO_PASS, or a pinned subset)
     pub grade_tests: Vec<String>,
+    /// published per-instance image ref (for run-swebench --image); None = host mode
+    pub image: Option<String>,
 }
 
 /// Collect the file paths a unified diff targets, from its `+++ b/<path>`
@@ -111,6 +116,27 @@ mkdir -p /logs/verifier\n\
 ids=\"$(tr '\\n' ' ' < /oracle/fail_to_pass)\"\n\
 {test_cmd} -v $ids >/tmp/test.out 2>&1 || true\n\
 kill \"$(cat /tmp/stub.pid)\" 2>/dev/null || true\n\
+ok=1\n\
+while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
+if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' >/logs/verifier/reward.json; \
+else printf '{{\"reward\":0}}\\n' >/logs/verifier/reward.json; tail -25 /tmp/test.out; fi\n"
+    )
+}
+
+/// Image-mode grade script: the pinned SWE-bench image already has the test env,
+/// so we activate its conda env (SWE-bench standard: /opt/miniconda3 env `testbed`)
+/// and run the FULL FAIL_TO_PASS faithfully — no host venv, no pip, no httpbin stub.
+/// Runs under bash (conda activate needs it). Resolved iff every FAIL_TO_PASS PASSED.
+pub fn grade_script_image(test_cmd: &str) -> String {
+    format!(
+        "set -e\n\
+. /opt/miniconda3/etc/profile.d/conda.sh\n\
+conda activate testbed\n\
+cd /testbed\n\
+git apply /oracle/test_patch.diff\n\
+mkdir -p /logs/verifier\n\
+ids=\"$(tr '\\n' ' ' < /oracle/fail_to_pass)\"\n\
+{test_cmd} -v $ids >/tmp/test.out 2>&1 || true\n\
 ok=1\n\
 while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
 if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' >/logs/verifier/reward.json; \
@@ -187,6 +213,7 @@ pub fn load_instance(inst: &Instance) -> Result<SwePlan, AdapterError> {
         } else {
             inst.grade_tests.clone()
         },
+        image: inst.image.clone(),
     })
 }
 
@@ -293,6 +320,35 @@ new file mode 100644
         assert!(s.contains("PASSED"), "{s}");
         assert!(s.contains(r#"{"reward":1}"#), "{s}");
         assert!(s.contains(r#"{"reward":0}"#), "{s}");
+    }
+
+    #[test]
+    fn instance_carries_image_ref() {
+        let j = INSTANCE.replace(
+            r#""version": "2.9""#,
+            r#""version": "2.9", "image": "docker.io/swebench/sweb.eval.x86_64.psf_1776_requests-2317:latest""#,
+        );
+        let plan = from_json(&j).unwrap();
+        assert_eq!(
+            plan.image.as_deref(),
+            Some("docker.io/swebench/sweb.eval.x86_64.psf_1776_requests-2317:latest")
+        );
+    }
+
+    #[test]
+    fn image_grade_script_activates_env_and_parses_fail_to_pass() {
+        let s = grade_script_image("python -m pytest -p no:cacheprovider");
+        assert!(s.contains("conda activate testbed"), "{s}");
+        assert!(s.contains("git apply /oracle/test_patch.diff"), "{s}");
+        assert!(s.contains("python -m pytest -p no:cacheprovider -v"), "{s}");
+        assert!(s.contains("/oracle/fail_to_pass"), "{s}");
+        assert!(s.contains("PASSED"), "{s}");
+        assert!(s.contains(r#"{"reward":1}"#), "{s}");
+        assert!(s.contains(r#"{"reward":0}"#), "{s}");
+        assert!(
+            !s.contains("httpbin_stub"),
+            "image mode uses the image's env, not the stub"
+        );
     }
 
     #[test]

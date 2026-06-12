@@ -157,6 +157,7 @@ pub fn run(
             session: out.join("grade-session"),
             wall_time_secs: policy.limits.wall_time_secs,
             network: proctor_grader::GraderNet::Deny,
+            rootfs: RootfsSpec::HostSystem,
         },
         &self_invoker(),
     )
@@ -325,6 +326,7 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
             session: out.join("grade-session"),
             wall_time_secs: plan.policy.limits.wall_time_secs,
             network: proctor_grader::GraderNet::Deny,
+            rootfs: RootfsSpec::HostSystem,
         },
         &self_invoker(),
     )
@@ -396,6 +398,7 @@ pub fn run_swebench(
     agent_cmd: &str,
     out: &Path,
     do_grade: bool,
+    use_image: bool,
 ) -> Result<Verdict> {
     let caps = proctor_sandbox::caps::probe();
     anyhow::ensure!(caps.all(), "host cannot sandbox (fail closed): {caps:?}");
@@ -406,6 +409,24 @@ pub fn run_swebench(
     std::fs::create_dir_all(out)?;
     let session = out.join("agent-session");
 
+    // image mode: fetch the instance's pinned image into an overlay-lower rootfs.
+    // The agent + grader run in that env; Proctor still overlays the gitsan'd repo
+    // at /testbed (below), so git-history mining stays dead.
+    let rootfs = if use_image {
+        let image = plan
+            .image
+            .as_deref()
+            .context("run-swebench --image requires an `image` ref in the instance")?;
+        let rootfs_dir = out.join("rootfs");
+        let _ = std::fs::remove_dir_all(&rootfs_dir);
+        proctor_sandbox::ociroot::export_image_rootfs(image, &rootfs_dir)
+            .map_err(|e| anyhow::anyhow!(e))
+            .context("fetch instance image rootfs")?;
+        RootfsSpec::Dir(rootfs_dir)
+    } else {
+        RootfsSpec::HostSystem
+    };
+
     // materialize the repo at base_commit with fix history stripped
     let lower = session.join("ws_lower");
     let _ = std::fs::remove_dir_all(&lower);
@@ -414,7 +435,7 @@ pub fn run_swebench(
 
     let masks: Vec<_> = plan.policy.mask_set().into_iter().collect();
     let spec = SandboxSpec {
-        rootfs: RootfsSpec::HostSystem,
+        rootfs: rootfs.clone(),
         workspace_lower: Some(lower),
         mount_at: plan.workdir.clone(),
         masks,
@@ -439,9 +460,17 @@ pub fn run_swebench(
         &out.join("violations.jsonl"),
     )?;
 
-    // grade (CI/--grade only): merge the agent's /testbed, apply the test_patch
-    // as the oracle, install deps over the Host grader network, run the tests.
-    let (pass, reward) = if do_grade && !plan.grade_tests.is_empty() {
+    // grade (CI/--grade only): merge the agent's /testbed, apply the hidden
+    // test_patch as the oracle, run the tests through the isolated grader. In
+    // --image mode the grader runs in the pinned image (faithful env) and gates on
+    // the full FAIL_TO_PASS; the host path gates on the pinned grade_tests against
+    // a local httpbin stub (the generic env can't reproduce the bug — see #6).
+    let grade_ids = if use_image {
+        &plan.fail_to_pass
+    } else {
+        &plan.grade_tests
+    };
+    let (pass, reward) = if do_grade && !grade_ids.is_empty() {
         let merged = out.join("graded-workspace");
         let _ = std::fs::remove_dir_all(&merged);
         merge_overlay(
@@ -454,17 +483,25 @@ pub fn run_swebench(
         let _ = std::fs::remove_dir_all(&oracle);
         std::fs::create_dir_all(&oracle)?;
         std::fs::write(oracle.join("test_patch.diff"), &plan.test_patch)?;
-        // Gate the verdict on the instance's fix-validating test(s) (grade_tests,
-        // a pinned FAIL_TO_PASS subset). The grade script runs them against a tiny
-        // local httpbin stub so the check is deterministic/offline; the full
-        // FAIL_TO_PASS+PASS_TO_PASS suite hits live httpbin.org and needs
-        // SWE-bench's pinned env (a documented non-goal). See the grading report.
-        std::fs::write(oracle.join("fail_to_pass"), plan.grade_tests.join("\n"))?;
-        std::fs::write(oracle.join("httpbin_stub.py"), SWEBENCH_HTTPBIN_STUB)?;
-        std::fs::write(
-            oracle.join("grade.sh"),
-            proctor_adapter_swebench::grade_script(&plan.install_cmd, &plan.test_cmd),
-        )?;
+        std::fs::write(oracle.join("fail_to_pass"), grade_ids.join("\n"))?;
+        let grade_cmd = if use_image {
+            // the pinned image already has the test env; activate its conda env and
+            // run the full FAIL_TO_PASS faithfully (no host venv, no httpbin stub).
+            std::fs::write(
+                oracle.join("grade.sh"),
+                proctor_adapter_swebench::grade_script_image(
+                    "python -m pytest -p no:cacheprovider",
+                ),
+            )?;
+            "bash /oracle/grade.sh".to_string()
+        } else {
+            std::fs::write(oracle.join("httpbin_stub.py"), SWEBENCH_HTTPBIN_STUB)?;
+            std::fs::write(
+                oracle.join("grade.sh"),
+                proctor_adapter_swebench::grade_script(&plan.install_cmd, &plan.test_cmd),
+            )?;
+            "sh /oracle/grade.sh".to_string()
+        };
 
         let gr = grade(
             &GradeRequest {
@@ -472,13 +509,14 @@ pub fn run_swebench(
                 workspace_mount: plan.workdir.clone(),
                 oracle,
                 oracle_mount: "/oracle".into(),
-                grade_cmd: "sh /oracle/grade.sh".into(),
+                grade_cmd,
                 protocol: GradeProtocol::RewardFile {
                     path: "/logs/verifier/reward.json".into(),
                 },
                 session: out.join("grade-session"),
                 wall_time_secs: plan.policy.limits.wall_time_secs,
                 network: proctor_grader::GraderNet::Host,
+                rootfs: rootfs.clone(),
             },
             &self_invoker(),
         )

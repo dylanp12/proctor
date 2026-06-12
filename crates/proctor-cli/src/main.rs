@@ -57,6 +57,10 @@ enum Cmd {
         /// dep install; intended for CI, not the local machine)
         #[arg(long)]
         grade: bool,
+        /// run the agent + grader inside the instance's pinned image
+        /// (faithful env; needs podman or docker; fetched daemonlessly)
+        #[arg(long)]
+        image: bool,
     },
     /// Verify a verdict's signature against a public key.
     Verify {
@@ -131,7 +135,8 @@ fn main() {
             agent,
             out,
             grade,
-        } => match run::run_swebench(&instance, &repo, &agent, &out, grade) {
+            image,
+        } => match run::run_swebench(&instance, &repo, &agent, &out, grade, image) {
             Ok(v) => {
                 println!(
                     "verdict: pass={} status={:?} violations={} reward={:?}",

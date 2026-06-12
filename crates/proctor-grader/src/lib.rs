@@ -39,6 +39,8 @@ pub struct GradeRequest {
     pub session: PathBuf,
     pub wall_time_secs: u64,
     pub network: GraderNet,
+    /// rootfs for the grader sandbox (HostSystem, or an image overlay-lower Dir)
+    pub rootfs: RootfsSpec,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -89,7 +91,7 @@ pub fn grade(req: &GradeRequest, invoker: &InitInvoker) -> Result<GradeResult, G
     };
 
     let spec = SandboxSpec {
-        rootfs: RootfsSpec::HostSystem,
+        rootfs: req.rootfs.clone(),
         workspace_lower: Some(lower),
         mount_at: req.workspace_mount.clone(),
         masks: vec![], // grader may see everything
