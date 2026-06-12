@@ -70,7 +70,7 @@ cp "$TASK_SRC/tests/test_outputs.py" "$WORK/tests/"   # the real oracle, verbati
 # 1) reproduce /app/logs offline via the real deterministic generator
 sed "s#/app/logs#$WORK/workspace/logs#" \
     "$TASK_SRC/environment/log_generator_deterministic.py" > "$OUT/gen.py"
-python3 "$OUT/gen.py"
+python3 "$OUT/gen.py" >&2   # generator prints to stdout; keep stdout = the 2 key lines
 echo "   generated $(find "$WORK/workspace/logs" -type f | wc -l) log files" >&2
 
 # 2) offline grader: real oracle assertions via host python -> Harbor reward.txt
