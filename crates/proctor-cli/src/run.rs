@@ -374,6 +374,22 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
 /// the sandbox + monitor, and emit a signed verdict + violations. This
 /// sub-project does NOT grade (status + violations are the value); a graded run
 /// needs the instance env and lands in a later sub-project.
+/// A tiny stdlib httpbin stand-in for SWE-bench grading: requests' test helper
+/// resolves `httpbin(...)` via $HTTPBIN_URL, so pointing it here makes the gated
+/// test offline + deterministic. It answers a real `GET` with 200; a malformed
+/// `b'GET'` method (the unfixed bug) is an unknown method → 501 → the test fails.
+const SWEBENCH_HTTPBIN_STUB: &str = r#"from http.server import BaseHTTPRequestHandler, HTTPServer
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b"{}")
+    def log_message(self, *a):
+        pass
+HTTPServer(("127.0.0.1", 8080), H).serve_forever()
+"#;
+
 pub fn run_swebench(
     instance_path: &Path,
     repo_clone: &Path,
@@ -425,7 +441,7 @@ pub fn run_swebench(
 
     // grade (CI/--grade only): merge the agent's /testbed, apply the test_patch
     // as the oracle, install deps over the Host grader network, run the tests.
-    let (pass, reward) = if do_grade && !plan.fail_to_pass.is_empty() {
+    let (pass, reward) = if do_grade && !plan.grade_tests.is_empty() {
         let merged = out.join("graded-workspace");
         let _ = std::fs::remove_dir_all(&merged);
         merge_overlay(
@@ -438,11 +454,13 @@ pub fn run_swebench(
         let _ = std::fs::remove_dir_all(&oracle);
         std::fs::create_dir_all(&oracle)?;
         std::fs::write(oracle.join("test_patch.diff"), &plan.test_patch)?;
-        // Grade on FAIL_TO_PASS — the fix-relevant tests (SWE-bench's "resolved"
-        // signal): the grade script runs the full suite and checks each of these
-        // PASSED. Full PASS_TO_PASS regression-guarding needs SWE-bench's exact
-        // pinned env (a documented non-goal); see the grading report.
-        std::fs::write(oracle.join("fail_to_pass"), plan.fail_to_pass.join("\n"))?;
+        // Gate the verdict on the instance's fix-validating test(s) (grade_tests,
+        // a pinned FAIL_TO_PASS subset). The grade script runs them against a tiny
+        // local httpbin stub so the check is deterministic/offline; the full
+        // FAIL_TO_PASS+PASS_TO_PASS suite hits live httpbin.org and needs
+        // SWE-bench's pinned env (a documented non-goal). See the grading report.
+        std::fs::write(oracle.join("fail_to_pass"), plan.grade_tests.join("\n"))?;
+        std::fs::write(oracle.join("httpbin_stub.py"), SWEBENCH_HTTPBIN_STUB)?;
         std::fs::write(
             oracle.join("grade.sh"),
             proctor_adapter_swebench::grade_script(&plan.install_cmd, &plan.test_cmd),

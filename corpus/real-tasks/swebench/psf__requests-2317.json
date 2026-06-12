@@ -152,5 +152,8 @@
   ],
   "version": "2.4",
   "install_cmd": "python3.9 -m venv /tmp/v && /tmp/v/bin/pip install -q -e . pytest pytest-httpbin pytest-mock",
-  "test_cmd": "/tmp/v/bin/python -m pytest -p no:cacheprovider"
+  "test_cmd": "/tmp/v/bin/python -m pytest -p no:cacheprovider",
+  "grade_tests": [
+    "test_requests.py::TestTimeout::test_encoded_methods"
+  ]
 }

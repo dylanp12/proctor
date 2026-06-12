@@ -41,6 +41,10 @@ pub struct Instance {
     pub install_cmd: Option<String>,
     #[serde(default)]
     pub test_cmd: Option<String>,
+    /// subset of FAIL_TO_PASS to gate the verdict on (defaults to all of
+    /// FAIL_TO_PASS); lets an instance pin the deterministic fix-validating tests
+    #[serde(default)]
+    pub grade_tests: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -55,6 +59,8 @@ pub struct SwePlan {
     pub pass_to_pass: Vec<String>,
     pub install_cmd: String,
     pub test_cmd: String,
+    /// the tests the verdict is gated on (FAIL_TO_PASS, or a pinned subset)
+    pub grade_tests: Vec<String>,
 }
 
 /// Collect the file paths a unified diff targets, from its `+++ b/<path>`
@@ -86,25 +92,29 @@ pub fn test_paths(diff: &str) -> Vec<PathBuf> {
 /// grader sandbox with /testbed = the agent's merged workspace and /oracle = the
 /// test patch + test_ids.
 pub fn grade_script(install_cmd: &str, test_cmd: &str) -> String {
-    // Run the full test suite (so fixtures/ordering match upstream) with per-test
-    // output, then decide "resolved" by checking each FAIL_TO_PASS id PASSED.
-    // This is SWE-bench's method and is robust to environment-flaky PASS_TO_PASS
-    // tests (which fail for every agent regardless of the fix).
+    // Apply the hidden test patch, install deps, then run the gated tests
+    // (/oracle/fail_to_pass) and decide "resolved" by checking each PASSED.
+    // requests' test helper resolves `httpbin(...)` via $HTTPBIN_URL, so we point
+    // it at a tiny stdlib stub (/oracle/httpbin_stub.py, written by the CLI) for a
+    // deterministic, offline check — the suite's live-httpbin.org tests need
+    // SWE-bench's pinned env (a non-goal). The stub returns 200 for a real `GET`
+    // and 501 for the malformed `b'GET'` method, so the fix is the discriminator.
     format!(
         "set -e\n\
 cd /testbed\n\
 git apply /oracle/test_patch.diff\n\
-{install_cmd} >/tmp/install.log 2>&1 || {{ echo 'install step failed'; tail -20 /tmp/install.log; }}\n\
+{install_cmd} >/tmp/install.log 2>&1 || echo 'install step failed'\n\
+python3.9 /oracle/httpbin_stub.py >/tmp/stub.log 2>&1 & echo $! >/tmp/stub.pid\n\
+export HTTPBIN_URL=http://127.0.0.1:8080/\n\
+sleep 2\n\
 mkdir -p /logs/verifier\n\
-{test_cmd} -v >/tmp/test.out 2>&1 || true\n\
+ids=\"$(tr '\\n' ' ' < /oracle/fail_to_pass)\"\n\
+{test_cmd} -v $ids >/tmp/test.out 2>&1 || true\n\
+kill \"$(cat /tmp/stub.pid)\" 2>/dev/null || true\n\
 ok=1\n\
-while IFS= read -r id; do\n\
-  [ -z \"$id\" ] && continue\n\
-  grep -qF \"$id PASSED\" /tmp/test.out || ok=0\n\
-done < /oracle/fail_to_pass\n\
-if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' > /logs/verifier/reward.json; \
-else printf '{{\"reward\":0}}\\n' > /logs/verifier/reward.json; \
-echo '--- FAIL_TO_PASS results ---'; while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -F \"$id \" /tmp/test.out | tail -1; done < /oracle/fail_to_pass; fi\n"
+while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
+if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' >/logs/verifier/reward.json; \
+else printf '{{\"reward\":0}}\\n' >/logs/verifier/reward.json; tail -25 /tmp/test.out; fi\n"
     )
 }
 
@@ -172,6 +182,11 @@ pub fn load_instance(inst: &Instance) -> Result<SwePlan, AdapterError> {
             .test_cmd
             .clone()
             .unwrap_or_else(|| "python -m pytest -p no:cacheprovider -q".into()),
+        grade_tests: if inst.grade_tests.is_empty() {
+            inst.fail_to_pass.clone()
+        } else {
+            inst.grade_tests.clone()
+        },
     })
 }
 
@@ -273,6 +288,8 @@ new file mode 100644
         assert!(s.contains("python -m pip install -e ."), "{s}");
         assert!(s.contains("python -m pytest -v"), "{s}");
         assert!(s.contains("/oracle/fail_to_pass"), "{s}");
+        assert!(s.contains("HTTPBIN_URL=http://127.0.0.1:8080/"), "{s}");
+        assert!(s.contains("/oracle/httpbin_stub.py"), "{s}");
         assert!(s.contains("PASSED"), "{s}");
         assert!(s.contains(r#"{"reward":1}"#), "{s}");
         assert!(s.contains(r#"{"reward":0}"#), "{s}");
