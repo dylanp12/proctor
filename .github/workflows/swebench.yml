@@ -55,6 +55,9 @@ jobs:
             "$BIN" run-swebench --grade --instance "$INST" --repo "$CLONE" \
               --agent "$A" --out "out-$kind" || true
             echo "--- $kind verdict ---"; cat "out-$kind/verdict.json"; echo
+            echo "--- $kind grader log (tail) ---"
+            tail -50 "out-$kind/grade-session/agent-stdout.log" 2>/dev/null || true
+            echo
           done
       - name: verify bundles
         shell: bash
