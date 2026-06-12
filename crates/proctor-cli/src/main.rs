@@ -61,6 +61,15 @@ enum Cmd {
         #[arg(long)]
         pubkey: String,
     },
+    /// Verify a run bundle: signature, violation chain, and artifact hashes.
+    VerifyBundle {
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        pubkey: Option<String>,
+    },
+    /// Print a fresh signing seed + its public key (for PROCTOR_SIGNING_SEED).
+    Keygen,
     /// Print host sandbox capabilities.
     Probe,
     /// Internal: sandbox-init re-exec target. Not for direct use.
@@ -144,6 +153,33 @@ fn main() {
                     2
                 }
             }
+        }
+        Cmd::VerifyBundle { bundle, pubkey } => {
+            match proctor_verdict::bundle::Bundle::load(&bundle) {
+                Ok(b) => match b.verify(pubkey.as_deref()) {
+                    Ok(()) => {
+                        println!(
+                            "bundle OK: signature valid, chain bound, {} violation(s), status={:?}",
+                            b.verdict.body.violations_count, b.verdict.body.status
+                        );
+                        0
+                    }
+                    Err(e) => {
+                        eprintln!("bundle INVALID: {e}");
+                        2
+                    }
+                },
+                Err(e) => {
+                    eprintln!("bundle INVALID: {e}");
+                    2
+                }
+            }
+        }
+        Cmd::Keygen => {
+            let s = proctor_verdict::sign::Signer::generate();
+            println!("seed={}", s.to_seed_hex());
+            println!("pubkey={}", s.public_key_hex());
+            0
         }
         Cmd::Probe => {
             let c = proctor_sandbox::caps::probe();

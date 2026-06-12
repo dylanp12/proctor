@@ -7,7 +7,6 @@ use proctor_policy::{NetworkMode, Policy};
 use proctor_sandbox::spawn::{run_sandboxed, InitInvoker};
 use proctor_sandbox::spec::{NetSpec, RootfsSpec, SandboxSpec};
 use proctor_verdict::digest::env_digest;
-use proctor_verdict::sign::Signer;
 use proctor_verdict::verdict::{Status, Verdict, VerdictBuilder};
 use std::path::Path;
 
@@ -16,6 +15,32 @@ fn self_invoker() -> InitInvoker {
         program: std::env::current_exe().expect("current exe"),
         prefix_args: vec!["__sandbox-init".into()],
     }
+}
+
+/// the agent-log artifacts of a run, as (name, host-path) pairs
+fn agent_log_artifacts(session: &Path) -> Vec<(String, std::path::PathBuf)> {
+    vec![
+        ("agent-stdout.log".into(), session.join("agent-stdout.log")),
+        ("agent-stderr.log".into(), session.join("agent-stderr.log")),
+    ]
+}
+
+/// digest of the agent logs, folded into the signed verdict body
+fn artifacts_digest_for(session: &Path) -> Result<String> {
+    let arts = proctor_verdict::bundle::hash_artifacts(&agent_log_artifacts(session))?;
+    Ok(proctor_verdict::digest::artifacts_digest(&arts))
+}
+
+/// write the portable bundle.json from the signed verdict + violations + logs
+fn write_bundle(verdict: &Verdict, session: &Path, out: &Path) -> Result<()> {
+    let arts = proctor_verdict::bundle::hash_artifacts(&agent_log_artifacts(session))?;
+    let bundle = proctor_verdict::bundle::Bundle::build(
+        verdict.clone(),
+        &out.join("violations.jsonl"),
+        &arts,
+    )?;
+    bundle.save(&out.join("bundle.json"))?;
+    Ok(())
 }
 
 pub fn run(
@@ -146,20 +171,9 @@ pub fn run(
         ("versions", versions.as_bytes()),
     ]);
 
-    let signer = match signing_seed {
-        Some(hex_seed) => {
-            let seed: [u8; 32] = hex::decode(hex_seed)
-                .context("decode seed")?
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("seed must be 32 bytes"))?;
-            Signer::from_bytes(&seed)
-        }
-        None => {
-            let s = Signer::generate();
-            std::fs::write(out.join("signing-seed.hex"), s.to_seed_hex())?;
-            s
-        }
-    };
+    let signer =
+        proctor_verdict::sign::resolve_signer(signing_seed, out).map_err(|e| anyhow::anyhow!(e))?;
+    let art_digest = artifacts_digest_for(&session)?;
 
     let status = if violations_count > 0 {
         Status::Compromised
@@ -176,6 +190,7 @@ pub fn run(
         violations_head,
         violations_count,
         env_digest: digest,
+        artifacts_digest: art_digest,
         reward: gr.reward,
     }
     .sign(&signer);
@@ -183,6 +198,7 @@ pub fn run(
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
+    write_bundle(&verdict, &session, out)?;
     Ok(verdict)
 }
 
@@ -323,8 +339,9 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
         ("versions", versions.as_bytes()),
     ]);
 
-    let signer = Signer::generate();
-    std::fs::write(out.join("signing-seed.hex"), signer.to_seed_hex())?;
+    let signer =
+        proctor_verdict::sign::resolve_signer(None, out).map_err(|e| anyhow::anyhow!(e))?;
+    let art_digest = artifacts_digest_for(&session)?;
     let status = if violations_count > 0 {
         Status::Compromised
     } else {
@@ -341,12 +358,14 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
         violations_head,
         violations_count,
         env_digest: digest,
+        artifacts_digest: art_digest,
         reward: gr.reward,
     }
     .sign(&signer);
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
+    write_bundle(&verdict, &session, out)?;
     Ok(verdict)
 }
 
@@ -414,8 +433,9 @@ pub fn run_swebench(
         ("versions", versions.as_bytes()),
     ]);
 
-    let signer = Signer::generate();
-    std::fs::write(out.join("signing-seed.hex"), signer.to_seed_hex())?;
+    let signer =
+        proctor_verdict::sign::resolve_signer(None, out).map_err(|e| anyhow::anyhow!(e))?;
+    let art_digest = artifacts_digest_for(&session)?;
     let status = if violations_count > 0 {
         Status::Compromised
     } else {
@@ -428,12 +448,14 @@ pub fn run_swebench(
         violations_head,
         violations_count,
         env_digest: digest,
+        artifacts_digest: art_digest,
         reward: None,
     }
     .sign(&signer);
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
+    write_bundle(&verdict, &session, out)?;
     Ok(verdict)
 }
 
