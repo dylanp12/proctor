@@ -9,9 +9,18 @@ fn sample(signer: &Signer) -> Verdict {
         violations_head: "abc123".into(),
         violations_count: 3,
         env_digest: "deadbeef".into(),
+        artifacts_digest: "cafef00d".into(),
         reward: Some(0.0),
     }
     .sign(signer)
+}
+
+#[test]
+fn tampered_artifacts_digest_fails_verification() {
+    let signer = Signer::generate();
+    let mut v = sample(&signer);
+    v.body.artifacts_digest = "00".into();
+    assert!(v.verify(&signer.public_key_hex()).is_err());
 }
 
 #[test]

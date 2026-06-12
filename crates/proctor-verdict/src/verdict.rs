@@ -21,6 +21,8 @@ pub struct VerdictBody {
     pub violations_head: String,
     pub violations_count: u64,
     pub env_digest: String,
+    /// digest binding the run's artifact (agent log) hashes into the signature
+    pub artifacts_digest: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reward: Option<f64>,
     pub proctor_version: String,
@@ -41,6 +43,7 @@ pub struct VerdictBuilder {
     pub violations_head: String,
     pub violations_count: u64,
     pub env_digest: String,
+    pub artifacts_digest: String,
     pub reward: Option<f64>,
 }
 
@@ -53,6 +56,7 @@ impl VerdictBuilder {
             violations_head: self.violations_head,
             violations_count: self.violations_count,
             env_digest: self.env_digest,
+            artifacts_digest: self.artifacts_digest,
             reward: self.reward,
             proctor_version: env!("CARGO_PKG_VERSION").to_string(),
         };

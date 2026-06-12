@@ -27,6 +27,69 @@ pub fn tree_digest(root: &Path) -> std::io::Result<String> {
     Ok(hex::encode(h.finalize()))
 }
 
+/// Genesis hash of an empty violation chain (matches proctor-monitor::chain).
+pub const GENESIS: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+/// Recompute the violation chain head from parsed records (each a JSON object
+/// containing the violation fields + a `chain` field). Mirrors the monitor's
+/// writer: head = SHA256(prev || canonical(record-without-chain)), folded from
+/// GENESIS. This is the verify side of the chain; agreement with the writer is
+/// cross-tested.
+pub fn chain_head(records: &[serde_json::Value]) -> String {
+    let mut prev = GENESIS.to_string();
+    for rec in records {
+        let mut v = rec.clone();
+        if let Some(map) = v.as_object_mut() {
+            map.remove("chain");
+        }
+        let canon = canonical_value(&v);
+        let mut h = Sha256::new();
+        h.update(prev.as_bytes());
+        h.update(canon.as_bytes());
+        prev = hex::encode(h.finalize());
+    }
+    prev
+}
+
+/// Sorted-key canonical JSON (ported from proctor-monitor::chain so the verdict
+/// crate stays free of a runtime dependency on the monitor).
+fn canonical_value(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let inner: Vec<String> = keys
+                .iter()
+                .map(|k| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(k).unwrap(),
+                        canonical_value(&map[*k])
+                    )
+                })
+                .collect();
+            format!("{{{}}}", inner.join(","))
+        }
+        serde_json::Value::Array(a) => {
+            format!(
+                "[{}]",
+                a.iter().map(canonical_value).collect::<Vec<_>>().join(",")
+            )
+        }
+        other => serde_json::to_string(other).unwrap(),
+    }
+}
+
+/// Digest binding a manifest's artifact (name, sha256) entries — folded into the
+/// signed verdict body, and recomputed at verify time from the manifest.
+pub fn artifacts_digest(artifacts: &[crate::bundle::Artifact]) -> String {
+    let parts: Vec<(&str, &[u8])> = artifacts
+        .iter()
+        .map(|a| (a.name.as_str(), a.sha256.as_bytes()))
+        .collect();
+    env_digest(&parts)
+}
+
 /// Digest of arbitrary labeled byte blobs (policy yaml, spec json, versions).
 pub fn env_digest(parts: &[(&str, &[u8])]) -> String {
     let mut sorted: Vec<&(&str, &[u8])> = parts.iter().collect();
@@ -68,5 +131,51 @@ mod tests {
         assert_eq!(a, b);
         let c = env_digest(&[("policy", b"x"), ("spec", b"z")]);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn chain_head_agrees_with_monitor_writer() {
+        use proctor_monitor::chain::{verify_chain, ChainWriter};
+        use proctor_monitor::event::{Violation, ViolationKind};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v.jsonl");
+        {
+            let mut w = ChainWriter::create(&path).unwrap();
+            for (i, p) in ["/oracle/a", "/oracle/b", "/logs/verifier"]
+                .iter()
+                .enumerate()
+            {
+                w.append(&Violation {
+                    step: i as u64 + 1,
+                    kind: if i == 2 {
+                        ViolationKind::MaskedWrite
+                    } else {
+                        ViolationKind::MaskedRead
+                    },
+                    path: Some((*p).into()),
+                    host: None,
+                    pid: 7,
+                    syscall: "openat".into(),
+                })
+                .unwrap();
+            }
+        }
+        let writer_head = verify_chain(&path).unwrap();
+        let records: Vec<serde_json::Value> = std::fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(
+            chain_head(&records),
+            writer_head,
+            "verify-side head must equal writer head"
+        );
+    }
+
+    #[test]
+    fn chain_head_empty_is_genesis() {
+        assert_eq!(chain_head(&[]), GENESIS);
     }
 }

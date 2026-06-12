@@ -583,6 +583,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "hex",
+ "proctor-monitor",
  "rand_core",
  "serde",
  "serde_json",
