@@ -111,3 +111,28 @@ Without `--image` (or without docker), the host system rootfs is used.
 - `status: compromised` — at least one attempt was logged; see `violations.jsonl`.
   A compromised run is still graded (the agent may have solved it *and* cheated);
   `pass` reflects the grade, `status` reflects integrity.
+
+## `action.yml` — run Proctor in GitHub Actions
+
+The repo ships a composite action that builds Proctor, runs a task under
+isolation, verifies the bundle, and uploads it as a build artifact.
+
+```yaml
+- uses: actions/checkout@v5
+- uses: dylanp12/proctor@main          # external repos: also set proctor-ref
+  with:
+    run-args: run --task ./task --agent "sh /workspace/solve.sh" --policy ./policy.yaml
+    out: proctor-out
+    proctor-ref: main                  # clone+build proctor (omit inside this repo)
+    signing-seed: ${{ secrets.PROCTOR_SIGNING_SEED }}   # optional stable key
+    pubkey: <operator-hex>             # optional: also assert the signer
+```
+
+Outputs: `pass`, `verdict-status`, `violations`, `bundle-path`. The action fails
+the job if isolation can't be established, the run errors, or `verify-bundle`
+fails. `signing-seed` is the **private** key — supply it only via an Actions
+secret; the upload lists files explicitly so an ephemeral run's
+`signing-seed.hex` is never published.
+
+The `demo.yml` workflow dogfoods the action on a synthetic task and the real
+Terminal-Bench task (honest + cheat) and publishes the bundles as artifacts.

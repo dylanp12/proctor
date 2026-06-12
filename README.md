@@ -1,5 +1,7 @@
 # Proctor
 
+[![demo](https://github.com/dylanp12/proctor/actions/workflows/demo.yml/badge.svg)](https://github.com/dylanp12/proctor/actions/workflows/demo.yml)
+
 **A tamper-proof execution sandbox for trustworthy AI coding-agent benchmarks.**
 
 AI coding-agent benchmarks are being gamed. An April 2026 University of Pennsylvania
