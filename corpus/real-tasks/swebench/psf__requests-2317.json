@@ -155,5 +155,6 @@
   "test_cmd": "/tmp/v/bin/python -m pytest -p no:cacheprovider",
   "grade_tests": [
     "test_requests.py::TestTimeout::test_encoded_methods"
-  ]
+  ],
+  "image": "docker.io/swebench/sweb.eval.x86_64.psf_1776_requests-2317:latest"
 }
