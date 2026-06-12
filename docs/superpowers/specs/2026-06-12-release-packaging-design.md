@@ -124,7 +124,7 @@ an unreadable heredoc in YAML and lets the notes be reviewed like code.
   set -euo pipefail
   NAME=proctor-x86_64-unknown-linux-gnu
   gh release download "$PROCTOR_VERSION" --repo dylanp12/proctor \
-     --pattern "$NAME.tar.gz" --pattern "$NAME.tar.gz.sha256" --dir .
+     --pattern "$NAME.tar.gz" --pattern "$NAME.tar.gz.sha256" --dir . --clobber
   sha256sum -c "$NAME.tar.gz.sha256"      # fail closed on mismatch
   tar -xzf "$NAME.tar.gz"
   echo "PROCTOR_BIN=$PWD/$NAME/proctor" >> "$GITHUB_ENV"
