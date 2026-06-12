@@ -117,13 +117,14 @@ an unreadable heredoc in YAML and lets the notes be reviewed like code.
   `build proctor`.
 - `host deps` stays **unconditional** (runtime libseccomp2 + the apparmor sysctl
   are needed either way).
-- New step, `if: inputs.proctor-version != ''`:
+- New step, `if: inputs.proctor-version != ''` (uses `gh release download`, not
+  raw `curl`, because the source repo is **private** — release assets need auth,
+  which `gh` supplies via the job token `GH_TOKEN: ${{ github.token }}`):
   ```bash
   set -euo pipefail
   NAME=proctor-x86_64-unknown-linux-gnu
-  base="https://github.com/dylanp12/proctor/releases/download/${PROCTOR_VERSION}"
-  curl -fsSL "$base/$NAME.tar.gz"        -o "$NAME.tar.gz"
-  curl -fsSL "$base/$NAME.tar.gz.sha256" -o "$NAME.tar.gz.sha256"
+  gh release download "$PROCTOR_VERSION" --repo dylanp12/proctor \
+     --pattern "$NAME.tar.gz" --pattern "$NAME.tar.gz.sha256" --dir .
   sha256sum -c "$NAME.tar.gz.sha256"      # fail closed on mismatch
   tar -xzf "$NAME.tar.gz"
   echo "PROCTOR_BIN=$PWD/$NAME/proctor" >> "$GITHUB_ENV"
@@ -195,5 +196,11 @@ local dry-run of the packaging:
   claim), not per-version changelog — fine for v0.1.0; a future enhancement can
   generate per-tag notes.
 - **Fast-path availability.** `proctor-version` only works after that release
-  exists; an unknown version fails closed at `curl -f`. The repo's own `demo.yml`
-  defaults to source-build so it never depends on a release existing.
+  exists; an unknown version fails closed at `gh release download`. The repo's own
+  `demo.yml` defaults to source-build so it never depends on a release existing.
+- **Private-repo download auth.** While the repo is private, release assets are
+  not anonymously downloadable. The action uses `gh release download` with the
+  job's `github.token`, which can read the repo's own releases — so the in-repo
+  fast-path test works. An *external* repo consuming a still-private Proctor would
+  need a PAT; this is mooted once the repo is made public at launch (the build-
+  from-source path with `proctor-ref` works for external users meanwhile).
