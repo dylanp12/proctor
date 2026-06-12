@@ -62,6 +62,35 @@ proctor verify --verdict ./out/verdict.json --pubkey <hex from verdict.public_ke
 Verification recomputes the signature over the canonical body, so any edited
 field, hidden violation count, or wrong key fails.
 
+## `proctor verify-bundle` — check a portable run bundle
+
+Every run also writes `out/bundle.json`: one self-contained file with the signed
+verdict, the violation records, and a manifest of agent-log hashes — all bound
+under the verdict's single signature. Hand it to anyone:
+
+```
+proctor verify-bundle --bundle ./out/bundle.json [--pubkey <operator-hex>]
+# bundle OK: signature valid, chain bound, 1 violation(s), status=Compromised
+```
+
+It re-checks the signature, recomputes the violation hash-chain and binds its
+head/count to the signed verdict, and binds the manifest's log hashes — strictly
+more than `verify`. With `--pubkey`, it also confirms the operator's identity.
+
+## Stable operator key
+
+So a signature proves *operator X produced this* (not just "internally
+consistent"), use one keypair across runs:
+
+```
+proctor keygen                       # prints seed=<hex> and pubkey=<hex>
+export PROCTOR_SIGNING_SEED=<seed>   # all run commands sign with it
+# publish the pubkey; verifiers pass it to `verify-bundle --pubkey`
+```
+
+Without it, each run mints a fresh key (saved to `out/signing-seed.hex`) — the
+bundle is self-consistent but not tied to a known operator.
+
 ## `proctor run-tb` — Terminal-Bench (Harbor) task
 
 Point it at a Harbor-format task dir (`task.toml`, `instruction.md`,

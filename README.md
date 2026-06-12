@@ -41,6 +41,11 @@ network / IPC / UTS namespaces, fully unprivileged:
 - the grader runs in a **second** isolated sandbox, against the true oracle the agent
   never saw; the verdict is an **ed25519 signature over RFC-8785 canonical JSON** + an
   environment digest
+- every run also emits a portable **`bundle.json`** — the signed verdict + the violation
+  records + agent-log hashes, all bound under one signature. `proctor verify-bundle`
+  re-checks the signature, the violation chain (bound to the verdict), and the log hashes;
+  with a stable operator key (`proctor keygen` / `PROCTOR_SIGNING_SEED`) it proves
+  *which operator* produced the result
 
 The design goal is a *general, benchmark-agnostic standard*. Terminal-Bench (Harbor
 format) is the first adapter (`proctor run-tb`); SWE-bench and RL-training integrations
