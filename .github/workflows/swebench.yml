@@ -5,8 +5,7 @@
 # because --grade postdates the v0.1.0 prebuilt.
 name: swebench
 on:
-  push: { branches: [main] }
-  workflow_dispatch:
+  workflow_dispatch:        # dispatch-only: the full requests test suite is slow
 permissions:
   contents: read
 jobs:

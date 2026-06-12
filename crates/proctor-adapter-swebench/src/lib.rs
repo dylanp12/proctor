@@ -86,15 +86,25 @@ pub fn test_paths(diff: &str) -> Vec<PathBuf> {
 /// grader sandbox with /testbed = the agent's merged workspace and /oracle = the
 /// test patch + test_ids.
 pub fn grade_script(install_cmd: &str, test_cmd: &str) -> String {
+    // Run the full test suite (so fixtures/ordering match upstream) with per-test
+    // output, then decide "resolved" by checking each FAIL_TO_PASS id PASSED.
+    // This is SWE-bench's method and is robust to environment-flaky PASS_TO_PASS
+    // tests (which fail for every agent regardless of the fix).
     format!(
         "set -e\n\
 cd /testbed\n\
 git apply /oracle/test_patch.diff\n\
 {install_cmd} >/tmp/install.log 2>&1 || {{ echo 'install step failed'; tail -20 /tmp/install.log; }}\n\
 mkdir -p /logs/verifier\n\
-ids=\"$(tr '\\n' ' ' < /oracle/test_ids)\"\n\
-if {test_cmd} $ids; then printf '{{\"reward\":1}}\\n' > /logs/verifier/reward.json; \
-else printf '{{\"reward\":0}}\\n' > /logs/verifier/reward.json; fi\n"
+{test_cmd} -v >/tmp/test.out 2>&1 || true\n\
+ok=1\n\
+while IFS= read -r id; do\n\
+  [ -z \"$id\" ] && continue\n\
+  grep -qF \"$id PASSED\" /tmp/test.out || ok=0\n\
+done < /oracle/fail_to_pass\n\
+if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' > /logs/verifier/reward.json; \
+else printf '{{\"reward\":0}}\\n' > /logs/verifier/reward.json; \
+echo '--- FAIL_TO_PASS results ---'; while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -F \"$id \" /tmp/test.out | tail -1; done < /oracle/fail_to_pass; fi\n"
     )
 }
 
@@ -258,11 +268,12 @@ new file mode 100644
 
     #[test]
     fn grade_script_has_apply_install_test_and_reward_branches() {
-        let s = grade_script("python -m pip install -e .", "python -m pytest -q");
+        let s = grade_script("python -m pip install -e .", "python -m pytest");
         assert!(s.contains("git apply /oracle/test_patch.diff"), "{s}");
         assert!(s.contains("python -m pip install -e ."), "{s}");
-        assert!(s.contains("python -m pytest -q"), "{s}");
-        assert!(s.contains("/oracle/test_ids"), "{s}");
+        assert!(s.contains("python -m pytest -v"), "{s}");
+        assert!(s.contains("/oracle/fail_to_pass"), "{s}");
+        assert!(s.contains("PASSED"), "{s}");
         assert!(s.contains(r#"{"reward":1}"#), "{s}");
         assert!(s.contains(r#"{"reward":0}"#), "{s}");
     }

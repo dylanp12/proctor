@@ -439,11 +439,10 @@ pub fn run_swebench(
         std::fs::create_dir_all(&oracle)?;
         std::fs::write(oracle.join("test_patch.diff"), &plan.test_patch)?;
         // Grade on FAIL_TO_PASS — the fix-relevant tests (SWE-bench's "resolved"
-        // signal): the gold fix makes them pass, no fix leaves them failing. Full
-        // PASS_TO_PASS regression-guarding needs SWE-bench's exact pinned test env
-        // (a documented non-goal); see docs/reports/2026-06-12-swebench-grading.md.
-        let ids = plan.fail_to_pass.clone();
-        std::fs::write(oracle.join("test_ids"), ids.join("\n"))?;
+        // signal): the grade script runs the full suite and checks each of these
+        // PASSED. Full PASS_TO_PASS regression-guarding needs SWE-bench's exact
+        // pinned env (a documented non-goal); see the grading report.
+        std::fs::write(oracle.join("fail_to_pass"), plan.fail_to_pass.join("\n"))?;
         std::fs::write(
             oracle.join("grade.sh"),
             proctor_adapter_swebench::grade_script(&plan.install_cmd, &plan.test_cmd),
