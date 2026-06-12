@@ -53,6 +53,10 @@ enum Cmd {
         agent: String,
         #[arg(long)]
         out: PathBuf,
+        /// run the SWE-bench tests and grade pass/reward (needs network for
+        /// dep install; intended for CI, not the local machine)
+        #[arg(long)]
+        grade: bool,
     },
     /// Verify a verdict's signature against a public key.
     Verify {
@@ -126,11 +130,12 @@ fn main() {
             repo,
             agent,
             out,
-        } => match run::run_swebench(&instance, &repo, &agent, &out) {
+            grade,
+        } => match run::run_swebench(&instance, &repo, &agent, &out, grade) {
             Ok(v) => {
                 println!(
-                    "verdict: status={:?} violations={}",
-                    v.body.status, v.body.violations_count
+                    "verdict: pass={} status={:?} violations={} reward={:?}",
+                    v.body.pass, v.body.status, v.body.violations_count, v.body.reward
                 );
                 0
             }

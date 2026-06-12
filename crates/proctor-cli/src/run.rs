@@ -379,6 +379,7 @@ pub fn run_swebench(
     repo_clone: &Path,
     agent_cmd: &str,
     out: &Path,
+    do_grade: bool,
 ) -> Result<Verdict> {
     let caps = proctor_sandbox::caps::probe();
     anyhow::ensure!(caps.all(), "host cannot sandbox (fail closed): {caps:?}");
@@ -415,14 +416,57 @@ pub fn run_swebench(
         extra_binds: vec![],
     };
 
-    // grading (pass/reward) is deferred to a later sub-project; the value here is
-    // the integrity verdict (status) + the violation timeline.
     run_sandboxed(&spec, &self_invoker()).context("agent sandbox run")?;
     let (violations_head, violations_count) = finalize_violations(
         None,
         &session.join("violations.jsonl"),
         &out.join("violations.jsonl"),
     )?;
+
+    // grade (CI/--grade only): merge the agent's /testbed, apply the test_patch
+    // as the oracle, install deps over the Host grader network, run the tests.
+    let (pass, reward) = if do_grade && !plan.fail_to_pass.is_empty() {
+        let merged = out.join("graded-workspace");
+        let _ = std::fs::remove_dir_all(&merged);
+        merge_overlay(
+            &session.join("ws_lower"),
+            &session.join("ws_upper"),
+            &merged,
+        )?;
+
+        let oracle = out.join("swebench-oracle");
+        let _ = std::fs::remove_dir_all(&oracle);
+        std::fs::create_dir_all(&oracle)?;
+        std::fs::write(oracle.join("test_patch.diff"), &plan.test_patch)?;
+        let mut ids = plan.fail_to_pass.clone();
+        ids.extend(plan.pass_to_pass.clone());
+        std::fs::write(oracle.join("test_ids"), ids.join("\n"))?;
+        std::fs::write(
+            oracle.join("grade.sh"),
+            proctor_adapter_swebench::grade_script(&plan.install_cmd, &plan.test_cmd),
+        )?;
+
+        let gr = grade(
+            &GradeRequest {
+                workspace: merged,
+                workspace_mount: plan.workdir.clone(),
+                oracle,
+                oracle_mount: "/oracle".into(),
+                grade_cmd: "sh /oracle/grade.sh".into(),
+                protocol: GradeProtocol::RewardFile {
+                    path: "/logs/verifier/reward.json".into(),
+                },
+                session: out.join("grade-session"),
+                wall_time_secs: plan.policy.limits.wall_time_secs,
+                network: proctor_grader::GraderNet::Host,
+            },
+            &self_invoker(),
+        )
+        .context("grade")?;
+        (gr.pass, gr.reward)
+    } else {
+        (false, None)
+    };
 
     let spec_json = serde_json::to_vec(&spec)?;
     let policy_yaml = plan.policy.to_yaml().context("policy to yaml")?;
@@ -443,13 +487,13 @@ pub fn run_swebench(
     };
     let verdict = VerdictBuilder {
         task_id: plan.instance_id.clone(),
-        pass: false, // not graded in this sub-project
+        pass,
         status,
         violations_head,
         violations_count,
         env_digest: digest,
         artifacts_digest: art_digest,
-        reward: None,
+        reward,
     }
     .sign(&signer);
     verdict
