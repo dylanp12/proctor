@@ -70,10 +70,23 @@ nor grader-fooling (`PASS`-greps, hardcoded outputs, mocks), which is a later ph
 
 ## Status
 
-**v1 implemented** (Linux, Rust, unprivileged). The exploit corpus
+**v1 implemented and released** (Linux, Rust, unprivileged). The exploit corpus
 ([`corpus/`](corpus/)) replays every documented in-sandbox cheat class and asserts each
-is blocked and logged. See **[CLAUDE.md](CLAUDE.md)** for the full design and reasoning,
-the **[spec](docs/superpowers/specs/2026-06-09-proctor-design.md)**, the
+is blocked and logged, and the full suite is **green in CI on a stock GitHub runner** —
+so the sandbox provably establishes off-machine, not just on a dev box. Shipped on top of
+the core:
+
+- **Signed, portable run bundles** — `bundle.json` (verdict + violations + log hashes
+  under one signature); `proctor verify-bundle` re-checks everything; stable operator keys.
+- **Real benchmark tasks, end-to-end:** a Terminal-Bench 2 task (reference solution →
+  clean pass; oracle read → blocked + logged) and a SWE-bench instance
+  (`proctor run-swebench`; `--grade` runs the tests through the isolated grader in CI).
+- **`proctor` as a GitHub Action** (`action.yml`) + a prebuilt **v0.1.0** binary, so a
+  benchmark's CI can run under Proctor in a few lines.
+
+**New here?** Read **[Why Proctor](docs/marketing/why-proctor.md)** first. For the full
+design and reasoning see **[CLAUDE.md](CLAUDE.md)**, the
+**[spec](docs/superpowers/specs/2026-06-09-proctor-design.md)**, the
 **[viability review](docs/superpowers/specs/2026-06-09-proctor-viability-review.md)**,
 and **[usage](docs/usage.md)**.
 

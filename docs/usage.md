@@ -105,6 +105,30 @@ proctor run-tb --task ./tb-task --agent "my-agent --solve" --out ./out
 
 Without `--image` (or without docker), the host system rootfs is used.
 
+## `proctor run-swebench` — SWE-bench instance
+
+Point it at a SWE-bench instance JSON + a clone of the instance's repo. The
+adapter materializes the repo at `base_commit` with **fix history stripped** (so
+`git log` can't reach the fix commit) and masks the test/patch paths, then runs
+the agent in `/testbed` with the network denied:
+
+```
+proctor run-swebench --instance ./psf__requests-2317.json \
+                     --repo ./requests-clone --agent "my-agent --solve" --out ./out
+```
+
+Without `--grade` (the default) this is **integrity-only**: it emits the signed
+verdict + the violation timeline (a `git log`-mining cheat is blocked + logged),
+with no test run — safe to run anywhere.
+
+Add `--grade` to also grade: a second isolated grader merges the agent's
+`/testbed`, applies the instance's hidden `test_patch`, installs dependencies over
+the **Host grader network**, runs the instance's fix-validating test(s), and binds
+the reward into the verdict. `--grade` needs network for the dependency install
+and is intended for **CI, not a local machine**. Faithful per-instance
+resolved-grading needs SWE-bench's pinned environment — see
+[the grading report](reports/2026-06-12-swebench-grading.md).
+
 ## Interpreting the verdict
 
 - `status: clean` — the agent attempted no in-sandbox cheat.
