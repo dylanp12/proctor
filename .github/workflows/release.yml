@@ -1,0 +1,35 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write          # create the GitHub Release
+jobs:
+  release:
+    runs-on: ubuntu-22.04  # build against older glibc for forward compat
+    steps:
+      - uses: actions/checkout@v5
+      - name: host deps
+        run: sudo apt-get update && sudo apt-get install -y libseccomp-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/dev-setup.sh
+      - run: cargo build --release -p proctor-cli
+      - name: smoke
+        run: ./target/release/proctor --version
+      - name: package
+        run: |
+          set -euo pipefail
+          NAME=proctor-x86_64-unknown-linux-gnu
+          mkdir -p "dist/$NAME"
+          cp target/release/proctor LICENSE README.md "dist/$NAME/"
+          tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"
+          ( cd dist && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256" )
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            dist/proctor-x86_64-unknown-linux-gnu.tar.gz \
+            dist/proctor-x86_64-unknown-linux-gnu.tar.gz.sha256 \
+            --title "$GITHUB_REF_NAME" --notes-file .github/release-notes.md
