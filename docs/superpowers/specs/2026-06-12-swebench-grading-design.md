@@ -90,7 +90,13 @@ The existing masking of `test_paths(test_patch)` + staged-answer drops is unchan
 
 ### `proctor-cli::run_swebench` (add grading)
 
-After the agent run + violation finalize, when `fail_to_pass` is non-empty:
+Grading is gated behind a new **`--grade`** flag (default off). This is what keeps
+the local integrity report (`run-swebench-report.sh`) from ever `pip install`-ing
+on the maintainer's machine: it runs `run-swebench` *without* `--grade`, so the
+heavy grade step only happens in CI where the workflow passes `--grade`.
+
+After the agent run + violation finalize, when `--grade` is passed and
+`fail_to_pass` is non-empty:
 
 1. `merge_overlay(&lower, &session.join("ws_upper"), &merged)` → agent's `/testbed`.
 2. Build the **oracle dir** `out/swebench-oracle/`:
@@ -105,8 +111,9 @@ After the agent run + violation finalize, when `fail_to_pass` is non-empty:
    `network: GraderNet::Host, … }, &self_invoker())`
 4. `verdict.pass = gr.pass; reward = gr.reward`.
 
-When `fail_to_pass` is empty (e.g. the adapter unit fixtures), skip grading and
-keep `pass: false` (today's behavior) — no regression.
+Without `--grade`, or when `fail_to_pass` is empty (e.g. the adapter unit
+fixtures), skip grading and keep `pass: false` (today's behavior) — no regression,
+and no network/pip locally.
 
 ### The generated grade script (`grade.sh`)
 
