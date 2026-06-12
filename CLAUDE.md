@@ -27,6 +27,14 @@ instance's tests through the isolated grader over the Host network in CI — the
 *pipeline* + integrity verdict ship; faithful per-instance resolved-grading needs
 SWE-bench's pinned env (non-goal), see
 [`docs/reports/2026-06-12-swebench-grading.md`](docs/reports/2026-06-12-swebench-grading.md).
+**Follow-on — docker-rootfs backend (done):** `run-swebench --image` runs the
+agent+grader inside the instance's pinned SWE-bench image (daemonless podman/docker
+fetch via `proctor_sandbox::ociroot` → `RootfsSpec::Dir`), with the gitsan'd repo
+overlaid at `/testbed` (git-mining still dies). The backend is complete + green in
+CI; an honest finding remains that `psf__requests-2317` doesn't discriminate even
+in its pinned image (its FAIL_TO_PASS tests pass at base + are httpbin-dominated) —
+a faithful-discrimination demo needs a deterministic logic-bug instance. See
+[`docs/reports/2026-06-12-swebench-grading-pinned.md`](docs/reports/2026-06-12-swebench-grading-pinned.md).
 **Working name:** Proctor (changeable). **Language:** Rust. **Platform:** Linux-only (v1).
 
 > **Verified-record note (do not regress):** the headline numbers are "1,000+

@@ -125,9 +125,23 @@ Add `--grade` to also grade: a second isolated grader merges the agent's
 `/testbed`, applies the instance's hidden `test_patch`, installs dependencies over
 the **Host grader network**, runs the instance's fix-validating test(s), and binds
 the reward into the verdict. `--grade` needs network for the dependency install
-and is intended for **CI, not a local machine**. Faithful per-instance
-resolved-grading needs SWE-bench's pinned environment — see
-[the grading report](reports/2026-06-12-swebench-grading.md).
+and is intended for **CI, not a local machine**.
+
+Add `--image` to run the agent + grader **inside the instance's pinned SWE-bench
+image** (fetched daemonlessly via `podman`/`docker`), with Proctor's gitsan'd repo
+still overlaid at `/testbed` so the git-mining cheat stays dead. This gives the
+benchmark's own Python/dependency environment for the test run:
+
+```
+proctor run-swebench --image --grade --instance ./inst.json \
+                     --repo ./clone --agent "my-agent --solve" --out ./out
+```
+
+Faithful per-instance resolved-grading needs the instance's tests to genuinely
+fail at base and pass after the fix in that env; see the
+[host-path report](reports/2026-06-12-swebench-grading.md) and the
+[pinned-image report](reports/2026-06-12-swebench-grading-pinned.md) for what the
+grade does and does not establish.
 
 ## Interpreting the verdict
 

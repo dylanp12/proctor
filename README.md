@@ -57,7 +57,9 @@ Host network on CI — see the
 [grading report](docs/reports/2026-06-12-swebench-grading.md), which also documents
 the boundary: faithful per-instance resolved-grading needs SWE-bench's pinned
 environment, while Proctor's reproducible signal is the tamper-evident integrity
-verdict (the git-mining cheat is blocked + flagged `compromised`).
+verdict (the git-mining cheat is blocked + flagged `compromised`). `--image` runs
+the agent + grader inside the instance's pinned SWE-bench image (daemonless
+podman/docker fetch) with the gitsan'd repo still overlaid at `/testbed`.
 
 ### Honest claim scope
 
