@@ -27,6 +27,22 @@ pub fn pid1_main(spec: &SandboxSpec) -> ! {
         );
         std::process::exit(112);
     }
+    // The old root was kept mounted (see mounts::pivot) so the proc mount above
+    // is permitted on strict kernels. Now that /proc exists, detach it before
+    // the agent can ever run. Fail closed: if the host root cannot be removed,
+    // abort rather than expose it.
+    if spec.pivot {
+        if let Err(e) = crate::mounts::detach_oldroot() {
+            emit(
+                STATUS_FD,
+                &StatusEvent::SetupError {
+                    stage: "detach-oldroot".into(),
+                    error: e.to_string(),
+                },
+            );
+            std::process::exit(112);
+        }
+    }
     // env-leak class: /proc/1/environ reads the startup environ from the stack,
     // which remove_var can't touch — the parent's `.env_clear()` on the init
     // Command is what keeps it empty. This loop clears the in-memory copy too.

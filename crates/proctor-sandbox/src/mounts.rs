@@ -376,6 +376,21 @@ fn pivot(newroot: &Path) -> Result<(), MountError> {
         target: "/".into(),
         source,
     })?;
+    // The old root (carrying the host's /proc) stays mounted at /.oldroot on
+    // purpose. pid1 mounts a fresh /proc next, and a non-initial user namespace
+    // only permits `mount -t proc` when another proc instance is already visible
+    // to vouch for it — the kernel's mount_too_revealing / mnt_already_visible
+    // check. (WSL2's 6.18 kernel is lax and allows it regardless; ubuntu-24.04
+    // CI runners are strict and return EPERM.) pid1 calls detach_oldroot()
+    // immediately after the proc mount, before the agent is ever forked, so the
+    // host root is never reachable from the agent.
+    Ok(())
+}
+
+/// Detach the old root left mounted by `pivot`. Called from pid1 AFTER the fresh
+/// /proc is mounted and BEFORE the agent is forked. Fails closed: the agent must
+/// never see the host filesystem, so a failure to remove it aborts the run.
+pub fn detach_oldroot() -> Result<(), MountError> {
     nix::mount::umount2("/.oldroot", nix::mount::MntFlags::MNT_DETACH).map_err(|source| {
         MountError::Op {
             op: "umount-oldroot".into(),
