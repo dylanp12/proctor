@@ -235,6 +235,12 @@ pub fn build_and_pivot(spec: &SandboxSpec) -> Result<(), MountError> {
         let _ = std::fs::create_dir_all(&stub);
         let _ = std::fs::write(stub.join("stub-resolv.conf"), &content);
         let _ = std::fs::write(stub.join("resolv.conf"), &content);
+        // image-rootfs mode: /etc is the writable overlay (not a RO host bind),
+        // and the image ships an empty/symlinked resolv.conf — write a working one
+        // directly (public resolvers, reliable on CI). No-op under the RO host bind.
+        let etc_resolv = newroot.join("etc/resolv.conf");
+        let _ = std::fs::remove_file(&etc_resolv);
+        let _ = std::fs::write(&etc_resolv, "nameserver 8.8.8.8\nnameserver 1.1.1.1\n");
     }
 
     // /proc mountpoint must exist for pid1 to mount onto
