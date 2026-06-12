@@ -219,6 +219,24 @@ pub fn build_and_pivot(spec: &SandboxSpec) -> Result<(), MountError> {
         )?;
     }
 
+    // Host-net sandboxes (the grader) need working DNS. /etc is bound read-only
+    // and /etc/resolv.conf is typically a symlink to the systemd-resolved stub
+    // under /run — a fresh tmpfs here — so the symlink dangles and name
+    // resolution fails. Recreate the stub target with the host's nameservers so
+    // the symlink resolves (127.0.0.53 works over the shared host loopback).
+    if matches!(spec.network, NetSpec::Host) {
+        let content = std::fs::read_to_string("/etc/resolv.conf").unwrap_or_default();
+        let content = if content.contains("nameserver") {
+            content
+        } else {
+            "nameserver 8.8.8.8\n".to_string()
+        };
+        let stub = newroot.join("run/systemd/resolve");
+        let _ = std::fs::create_dir_all(&stub);
+        let _ = std::fs::write(stub.join("stub-resolv.conf"), &content);
+        let _ = std::fs::write(stub.join("resolv.conf"), &content);
+    }
+
     // /proc mountpoint must exist for pid1 to mount onto
     mkdir(&newroot.join("proc"))?;
 
