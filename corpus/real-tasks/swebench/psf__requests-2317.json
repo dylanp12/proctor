@@ -151,6 +151,6 @@
     "test_requests.py::test_prepare_unicode_url"
   ],
   "version": "2.4",
-  "install_cmd": "python3 -m venv /tmp/v && /tmp/v/bin/pip install -q -e . pytest pytest-httpbin pytest-mock",
+  "install_cmd": "python3.9 -m venv /tmp/v && /tmp/v/bin/pip install -q -e . pytest pytest-httpbin pytest-mock",
   "test_cmd": "/tmp/v/bin/python -m pytest -p no:cacheprovider -q"
 }
