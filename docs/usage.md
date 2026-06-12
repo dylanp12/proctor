@@ -134,5 +134,15 @@ fails. `signing-seed` is the **private** key — supply it only via an Actions
 secret; the upload lists files explicitly so an ephemeral run's
 `signing-seed.hex` is never published.
 
+To skip the ~1 min source build, point the action at a published release — it
+`gh release download`s and checksum-verifies the prebuilt binary instead:
+
+```yaml
+- uses: dylanp12/proctor@main
+  with:
+    proctor-version: v0.1.0        # download the prebuilt binary (skips the build)
+    run-args: run --task ./task --agent "sh /workspace/solve.sh" --policy ./policy.yaml
+```
+
 The `demo.yml` workflow dogfoods the action on a synthetic task and the real
 Terminal-Bench task (honest + cheat) and publishes the bundles as artifacts.

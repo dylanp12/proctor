@@ -71,6 +71,29 @@ the **[spec](docs/superpowers/specs/2026-06-09-proctor-design.md)**, the
 **[viability review](docs/superpowers/specs/2026-06-09-proctor-viability-review.md)**,
 and **[usage](docs/usage.md)**.
 
+## Install
+
+**Prebuilt binary** (Linux x86_64, glibc ≥ 2.35):
+
+```
+gh release download v0.1.0 --repo dylanp12/proctor \
+  --pattern 'proctor-x86_64-unknown-linux-gnu.tar.gz*'
+sha256sum -c proctor-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf proctor-x86_64-unknown-linux-gnu.tar.gz
+sudo install proctor-x86_64-unknown-linux-gnu/proctor /usr/local/bin/
+proctor --version
+```
+
+Needs `libseccomp2` (the runtime library) present — installed by default on most
+distributions (`sudo apt-get install -y libseccomp2` otherwise).
+
+**From source** with `cargo`:
+
+```
+sudo apt-get install -y libseccomp-dev          # link-time libseccomp
+cargo install --git https://github.com/dylanp12/proctor proctor-cli
+```
+
 ## Building
 
 ```
