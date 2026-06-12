@@ -7,6 +7,10 @@ name: demo
 on:
   push: { branches: [main] }
   workflow_dispatch:
+    inputs:
+      proctor-version:
+        description: "If set, the action downloads this release's prebuilt binary instead of building."
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -39,6 +43,7 @@ jobs:
           out: out-synth
           artifact-name: proctor-bundle-synthetic
           signing-seed: ${{ secrets.PROCTOR_SIGNING_SEED }}
+          proctor-version: ${{ inputs.proctor-version || '' }}
   terminal-bench:
     runs-on: ubuntu-24.04
     steps:
@@ -57,6 +62,7 @@ jobs:
           out: out-tb-honest
           artifact-name: proctor-bundle-tb-honest
           signing-seed: ${{ secrets.PROCTOR_SIGNING_SEED }}
+          proctor-version: ${{ inputs.proctor-version || '' }}
       - name: proctor run-tb (cheat)
         uses: ./
         with:
@@ -64,3 +70,4 @@ jobs:
           out: out-tb-cheat
           artifact-name: proctor-bundle-tb-cheat
           signing-seed: ${{ secrets.PROCTOR_SIGNING_SEED }}
+          proctor-version: ${{ inputs.proctor-version || '' }}
