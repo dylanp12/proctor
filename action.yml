@@ -25,6 +25,9 @@ inputs:
   working-directory:
     description: "Path to the proctor source checkout (used when proctor-ref is empty)."
     default: "."
+  proctor-version:
+    description: "If set, download this release's prebuilt binary (gh release download) instead of building."
+    default: ""
 outputs:
   pass:
     description: "verdict.pass (true/false)."
@@ -50,15 +53,17 @@ runs:
         # ubuntu restricts unprivileged userns via apparmor; the sandbox needs it
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
     - name: rust toolchain
+      if: ${{ inputs.proctor-version == '' }}
       uses: dtolnay/rust-toolchain@stable
     - name: checkout proctor (proctor-ref)
-      if: ${{ inputs.proctor-ref != '' }}
+      if: ${{ inputs.proctor-ref != '' && inputs.proctor-version == '' }}
       uses: actions/checkout@v5
       with:
         repository: dylanp12/proctor
         ref: ${{ inputs.proctor-ref }}
         path: .proctor-src
     - name: resolve source path
+      if: ${{ inputs.proctor-version == '' }}
       shell: bash
       env:
         PROCTOR_REF: ${{ inputs.proctor-ref }}
@@ -71,6 +76,7 @@ runs:
           echo "PROCTOR_SRC=$(cd "$WORKDIR" && pwd)" >> "$GITHUB_ENV"
         fi
     - name: build proctor
+      if: ${{ inputs.proctor-version == '' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -78,6 +84,21 @@ runs:
         ./scripts/dev-setup.sh
         cargo build --release -p proctor-cli
         echo "PROCTOR_BIN=$PROCTOR_SRC/target/release/proctor" >> "$GITHUB_ENV"
+    - name: obtain prebuilt proctor
+      if: ${{ inputs.proctor-version != '' }}
+      shell: bash
+      env:
+        PROCTOR_VERSION: ${{ inputs.proctor-version }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        NAME=proctor-x86_64-unknown-linux-gnu
+        # repo may be private -> gh authenticates with the job token
+        gh release download "$PROCTOR_VERSION" --repo dylanp12/proctor \
+          --pattern "$NAME.tar.gz" --pattern "$NAME.tar.gz.sha256" --dir .
+        sha256sum -c "$NAME.tar.gz.sha256"   # fail closed on mismatch
+        tar -xzf "$NAME.tar.gz"
+        echo "PROCTOR_BIN=$PWD/$NAME/proctor" >> "$GITHUB_ENV"
     - name: run proctor
       shell: bash
       env:
