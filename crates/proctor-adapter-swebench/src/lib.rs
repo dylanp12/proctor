@@ -117,7 +117,7 @@ ids=\"$(tr '\\n' ' ' < /oracle/fail_to_pass)\"\n\
 {test_cmd} -v $ids >/tmp/test.out 2>&1 || true\n\
 kill \"$(cat /tmp/stub.pid)\" 2>/dev/null || true\n\
 ok=1\n\
-while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
+while IFS= read -r id || [ -n \"$id\" ]; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
 if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' >/logs/verifier/reward.json; \
 else printf '{{\"reward\":0}}\\n' >/logs/verifier/reward.json; tail -25 /tmp/test.out; fi\n"
     )
@@ -132,13 +132,14 @@ pub fn grade_script_image(test_cmd: &str) -> String {
         "set -e\n\
 . /opt/miniconda3/etc/profile.d/conda.sh\n\
 conda activate testbed\n\
+python -m pytest --version >/dev/null 2>&1 || python -m pip install -q pytest >/dev/null 2>&1 || true\n\
 cd /testbed\n\
 git apply /oracle/test_patch.diff\n\
 mkdir -p /logs/verifier\n\
 ids=\"$(tr '\\n' ' ' < /oracle/fail_to_pass)\"\n\
 {test_cmd} -v $ids >/tmp/test.out 2>&1 || true\n\
 ok=1\n\
-while IFS= read -r id; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
+while IFS= read -r id || [ -n \"$id\" ]; do [ -z \"$id\" ] && continue; grep -qF \"$id PASSED\" /tmp/test.out || ok=0; done < /oracle/fail_to_pass\n\
 if [ \"$ok\" = 1 ]; then printf '{{\"reward\":1}}\\n' >/logs/verifier/reward.json; \
 else printf '{{\"reward\":0}}\\n' >/logs/verifier/reward.json; tail -25 /tmp/test.out; fi\n"
     )
