@@ -1,79 +1,81 @@
-# SWE-bench grading in the pinned image (docker-rootfs backend)
+# Faithful SWE-bench grading under Proctor (docker-rootfs backend)
 
 **Date:** 2026-06-12
-**Instance:** `psf__requests-2317` (SWE-bench Lite)
-**Where:** GitHub Actions (`swebench` workflow, `grade-image` job), off the maintainer's machine.
+**Instances:** `sympy__sympy-13647`, `psf__requests-2317` (SWE-bench Lite)
+**Where:** GitHub Actions (`swebench` workflow), off the maintainer's machine.
 **Reproduce:** `gh workflow run swebench.yml` (dispatch-only).
 
-## What this delivers (the backend — complete + green in CI)
+> **Supersedes the earlier "does not discriminate" findings.** Those were caused
+> by a grade bug, now fixed (see "The bug that hid everything"). With it fixed,
+> Proctor grades SWE-bench instances **faithfully** — a real fix resolves the
+> instance, a no-op does not, and a cheat is blocked, flagged, and fails.
 
-`proctor run-swebench --image` runs the agent **and** grader inside the instance's
-**pinned SWE-bench image**, while preserving Proctor's isolation and integrity:
+## The result — faithful, on two instances, three ways
+
+All three `swebench` jobs are green, and each produces the full matrix:
+
+| job | env | honest (gold fix) | unsolved (no-op) | cheat (git-mining) |
+| --- | --- | --- | --- | --- |
+| `grade` | host rootfs + local httpbin stub (requests) | `pass=true reward=1` | `pass=false reward=0` | `compromised, pass=false reward=0` |
+| `grade-image` | **pinned image** (requests, full FAIL_TO_PASS) | `pass=true reward=1` | `pass=false reward=0` | `compromised, pass=false reward=0` |
+| `grade-image-sympy` | **pinned image** (sympy `col_insert`) | `pass=true reward=1` | `pass=false reward=0` | `compromised, pass=false reward=0` |
+
+The bundles `verify-bundle` (e.g. sympy: honest clean/0 violations, unsolved
+clean/0, cheat compromised/1). A real fix is graded resolved; no fix isn't; and
+the cheat is caught **and** unresolved — the whole thesis, end to end.
+
+## The docker-rootfs backend (what makes the pinned-image runs possible)
+
+`proctor run-swebench --image` runs the agent **and** grader inside the
+instance's pinned SWE-bench image, without giving up isolation or integrity:
 
 - **Daemonless image → rootfs** (`proctor_sandbox::ociroot`): `podman`/`docker`
-  auto-detected; `create` + `export | tar` into an overlay-lower directory. No
-  container runtime executes the task — Proctor still runs it in its own
-  namespaces.
+  auto-detected; `create` + `export | tar` into an overlay-lower dir. No container
+  runtime executes the task — Proctor still runs it in its own namespaces.
 - **Image as rootfs, gitsan'd repo overlaid at `/testbed`**: the pinned env
-  (correct Python/deps) *and* the base-commit, fix-history-stripped repo — so the
-  `git log`-mining cheat still dies by construction.
-- **Grader in the image**: activates the image's conda env, applies the hidden
-  `test_patch`, runs the FAIL_TO_PASS suite, signs the reward into the verdict +
-  bundle. DNS works inside the image rootfs (a Host-net resolv.conf fix).
+  (correct Python/deps, e.g. sympy editable-installed at `/testbed`) *and* the
+  base-commit, fix-history-stripped repo — so the `git log`-mining cheat still
+  dies by construction (the cheat run is `compromised` and unresolved).
+- **Grader in the image**: activates the image's conda env (`testbed`), installs
+  `pytest` if absent (the SWE-bench images don't ship it), applies the hidden
+  `test_patch`, runs the FAIL_TO_PASS suite, and signs the reward into the verdict.
+- **Working DNS in the image rootfs** (a Host-net `/etc/resolv.conf` fix) so the
+  test bootstrap and any network the suite needs work.
 
-The `grade-image` job is **green**; all three bundles `verify-bundle`. The systems
-goal — run a benchmark task inside its pinned container image without giving up
-Proctor's isolation, integrity, or signed verdict — is met.
+## The bug that hid everything
 
-## The result on this instance, and an honest finding
+Earlier runs showed *all three* agents "passing" — which looked like the bug not
+manifesting / the env not reproducing. It was neither. The grade script never
+actually checked the tests, for two compounding reasons:
 
-| agent | `pass` | `status` |
-| --- | --- | --- |
-| honest (gold patch) | true | clean |
-| unsolved (no-op) | true | clean |
-| cheat (git-mining) | true | **compromised** |
+1. **`while read` skipped the only test id.** `/oracle/fail_to_pass` is written
+   without a trailing newline; `while IFS= read -r id; …` returns non-zero on the
+   final newline-less line, so with a single id the loop body **never ran** and the
+   `ok` flag stayed `1` → **reward was always 1**, regardless of test results.
+   Fixed with `… read -r id || [ -n "$id" ]`.
+2. **No `pytest` in the image env.** SWE-bench's `testbed` conda env ships no
+   `pytest`, so `python -m pytest` failed; `grade_script_image` now installs it
+   (the grader has network).
 
-All three "pass" — the same non-discrimination seen on the host path (#6). The
-reproducible signal remains the **integrity verdict**: only the cheat is flagged
-`compromised`.
+With both fixed, the grade is faithful — confirmed locally and on the runner. (The
+same `while read` fix corrects the host-path grade reported in
+[the #6 report](2026-06-12-swebench-grading.md), which now also discriminates.)
 
-**Why `psf__requests-2317` does not discriminate — in any environment we can
-construct:** its eight FAIL_TO_PASS tests **pass at the base commit** everywhere we
-ran them — host Python 3.9 (#6) and now the pinned image, both online and against a
-local stub. Two compounding reasons:
+## What this establishes
 
-1. **The bug doesn't manifest on the available interpreter.** The fix changes
-   `method = builtin_str(method)` → `to_native_string(method)` (so a bytes method
-   `b'GET'` isn't stringified to `"b'GET'"`). On the Python in reach,
-   `requests.request(b'GET', …)` already succeeds at base — the FAIL_TO_PASS test
-   `test_encoded_methods` never failed for a *method* reason in our runs, only ever
-   on `ConnectionError`.
-2. **The tests are dominated by live `httpbin`.** Seven of the eight hit
-   `httpbin(...)` (redirects, posts, basic-auth); their pass/fail tracks
-   connectivity and 12 years of `httpbin.org` drift, not the fix.
+- **Proctor grades SWE-bench faithfully** — both on the host (with a local httpbin
+  stub for a network test) and, generally, inside the instance's **pinned image**,
+  demonstrated on a network bug (requests) and a pure-logic bug (sympy).
+- **Integrity is preserved throughout**: the cheat is `compromised` (git history
+  unreachable, masked-answer read logged) *and* unresolved — a naive grader might
+  pass it; Proctor does not.
+- The docker-rootfs backend generalizes the grade to any instance with a published
+  image, while keeping Proctor's isolation + signed, tamper-evident verdict.
 
-So even the pinned **image is necessary but not sufficient** for a faithful
-resolved/unresolved grade of this instance: SWE-bench's dataset labels these
-"fail at base" under its exact 2024 eval conditions, which the image alone (as a
-rootfs) doesn't reconstitute.
+## Honest boundary
 
-## What this means
-
-- The **docker-rootfs backend is done and correct** — a real systems capability
-  (pinned-env execution + integrity + signed verdict), independent of any one
-  instance.
-- Demonstrating **faithful discrimination** needs a *deterministic, network-free
-  logic-bug instance* whose FAIL_TO_PASS genuinely fails at base and passes after
-  the fix in its pinned image. That is an **instance/data choice**, separable from
-  the backend — `psf__requests-2317` happens to be a poor discriminator (a method
-  bug that doesn't surface on modern Python + a network-heavy test suite).
-- Proctor's core claim is unchanged and reproducible: **in-sandbox access cheats
-  die by construction and leave a signed, tamper-evident trail** — the cheat run
-  is `compromised` here regardless of the grade.
-
-## Honest boundary (restated)
-
-A trustworthy *grade* of an arbitrary SWE-bench instance ultimately requires that
-instance's full eval harness conditions; Proctor contributes the isolation, the
-pinned-env execution, and the tamper-evident verdict. We document where the grade
-is and isn't faithful rather than overclaim it.
+A faithful grade still depends on the instance's tests being deterministic in the
+provided env (the host path uses a local stub for requests' network test; the
+pinned image supplies the real env). Proctor contributes the isolation, the
+pinned-env execution, and the signed verdict; we verify where the grade is
+faithful rather than assume it.

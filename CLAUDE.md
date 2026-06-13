@@ -24,16 +24,19 @@ composite `action.yml` + dogfood `demo.yml` (CI now green on `ubuntu-24.04` — 
 was before; proc-mount fix), (5) release & packaging (**v0.1.0** prebuilt binary +
 `proctor-version` action fast-path), (6) `proctor run-swebench --grade` runs a real
 instance's tests through the isolated grader over the Host network in CI — the grading
-*pipeline* + integrity verdict ship; faithful per-instance resolved-grading needs
-SWE-bench's pinned env (non-goal), see
-[`docs/reports/2026-06-12-swebench-grading.md`](docs/reports/2026-06-12-swebench-grading.md).
-**Follow-on — docker-rootfs backend (done):** `run-swebench --image` runs the
-agent+grader inside the instance's pinned SWE-bench image (daemonless podman/docker
-fetch via `proctor_sandbox::ociroot` → `RootfsSpec::Dir`), with the gitsan'd repo
-overlaid at `/testbed` (git-mining still dies). The backend is complete + green in
-CI; an honest finding remains that `psf__requests-2317` doesn't discriminate even
-in its pinned image (its FAIL_TO_PASS tests pass at base + are httpbin-dominated) —
-a faithful-discrimination demo needs a deterministic logic-bug instance. See
+pipeline + integrity verdict (grading is now **faithful**; see the docker-rootfs
+follow-on below — an early "doesn't discriminate" note in
+[`docs/reports/2026-06-12-swebench-grading.md`](docs/reports/2026-06-12-swebench-grading.md)
+was a since-fixed grade bug).
+**Follow-on — docker-rootfs backend (done) + faithful grading:** `run-swebench
+--image` runs the agent+grader inside the instance's pinned SWE-bench image
+(daemonless podman/docker fetch via `proctor_sandbox::ociroot` → `RootfsSpec::Dir`),
+gitsan'd repo overlaid at `/testbed` (git-mining still dies). **Grading is now
+faithful** across three CI jobs — host-stub (requests), pinned-image (requests),
+pinned-image (sympy `col_insert`): honest (gold fix) `reward=1`, unsolved `reward=0`,
+cheat `compromised`+`reward=0`. (The earlier "doesn't discriminate" finding was a
+grade bug — `while read` skipped the newline-less single test id, so reward was
+always 1; plus images ship no pytest. Both fixed.) See
 [`docs/reports/2026-06-12-swebench-grading-pinned.md`](docs/reports/2026-06-12-swebench-grading-pinned.md).
 **Working name:** Proctor (changeable). **Language:** Rust. **Platform:** Linux-only (v1).
 

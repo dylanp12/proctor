@@ -5,6 +5,17 @@
 **Where:** GitHub Actions (`swebench` workflow), off the maintainer's machine.
 **Reproduce:** `gh workflow run swebench.yml` (dispatch-only).
 
+> **CORRECTION (2026-06-12, supersedes the conclusion below).** This report
+> originally concluded that the host path "does not discriminate" (all agents
+> graded `pass`). That was a **grade bug**, not a real finding: `/oracle/fail_to_pass`
+> is written without a trailing newline, so the `while IFS= read -r id` loop skipped
+> the only test id and `reward` was **always 1**. With that fixed (`… || [ -n "$id" ]`),
+> the host path **discriminates faithfully** — honest (gold fix) `reward=1`, unsolved
+> `reward=0`, cheat `compromised` + `reward=0` — and so does the pinned-image path on
+> both requests and sympy. See the corrected, primary result in
+> [`2026-06-12-swebench-grading-pinned.md`](2026-06-12-swebench-grading-pinned.md).
+> The original text is kept below for the record.
+
 ## What this demonstrates
 
 `proctor run-swebench --grade` runs a **real** SWE-bench instance entirely under
