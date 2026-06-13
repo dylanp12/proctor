@@ -147,3 +147,71 @@ jobs:
             out-img-unsolved/bundle.json
             out-img-cheat/bundle.json
           if-no-files-found: error
+
+  # Faithful-discrimination demo: a deterministic, network-free logic-bug instance
+  # (sympy col_insert) graded in its pinned image. Here the gold fix resolves and a
+  # no-op does not — the payoff requests-2317 couldn't show.
+  grade-image-sympy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: host deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libseccomp-dev git podman
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/dev-setup.sh
+      - run: cargo build --release -p proctor-cli
+      - name: fetch sympy at base_commit + assemble agents
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          INST=corpus/real-tasks/swebench/sympy__sympy-13647.json
+          REPOURL="https://github.com/$(jq -r .repo "$INST").git"
+          BASE="$(jq -r .base_commit "$INST")"
+          CLONE="$RUNNER_TEMP/sympy"
+          mkdir -p "$CLONE"; git -C "$CLONE" init -q
+          git -C "$CLONE" fetch --depth 1 -q "$REPOURL" "$BASE"
+          DESC="$(git ls-remote "$REPOURL" HEAD | cut -f1)"
+          echo "clone=$CLONE" >> "$GITHUB_OUTPUT"
+          ./scripts/assemble-swebench-demo.sh "$INST" "$DESC" >> "$GITHUB_OUTPUT"
+      - name: grade in the pinned image (honest / unsolved / cheat)
+        shell: bash
+        env:
+          BIN: ${{ github.workspace }}/target/release/proctor
+          INST: corpus/real-tasks/swebench/sympy__sympy-13647.json
+          CLONE: ${{ steps.prep.outputs.clone }}
+          HONEST: ${{ steps.prep.outputs.honest }}
+          UNSOLVED: ${{ steps.prep.outputs.unsolved }}
+          CHEAT: ${{ steps.prep.outputs.cheat }}
+        run: |
+          set -euo pipefail
+          for kind in honest unsolved cheat; do
+            case $kind in
+              honest) A="$HONEST";; unsolved) A="$UNSOLVED";; cheat) A="$CHEAT";;
+            esac
+            echo "== $kind =="
+            "$BIN" run-swebench --image --grade --instance "$INST" --repo "$CLONE" \
+              --agent "$A" --out "out-sym-$kind" || true
+            echo "--- $kind verdict ---"; cat "out-sym-$kind/verdict.json"; echo
+            echo "--- $kind grader log (tail) ---"
+            tail -30 "out-sym-$kind/grade-session/agent-stdout.log" 2>/dev/null || true
+            echo
+          done
+      - name: verify bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for kind in honest unsolved cheat; do
+            target/release/proctor verify-bundle --bundle "out-sym-$kind/bundle.json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: swebench-image-bundles-sympy
+          path: |
+            out-sym-honest/bundle.json
+            out-sym-unsolved/bundle.json
+            out-sym-cheat/bundle.json
+          if-no-files-found: error
