@@ -14,5 +14,12 @@ fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "unknown".to_string());
     println!("cargo:rustc-env=PROCTOR_GIT_COMMIT={commit}");
+    // Rebuild when the commit changes: watch HEAD and the branch ref it points to
+    // (HEAD itself is unchanged by new commits on a branch).
     println!("cargo:rerun-if-changed=../../.git/HEAD");
+    if let Ok(head) = std::fs::read_to_string("../../.git/HEAD") {
+        if let Some(r) = head.strip_prefix("ref: ") {
+            println!("cargo:rerun-if-changed=../../.git/{}", r.trim());
+        }
+    }
 }

@@ -1,0 +1,21 @@
+Vendored third-party benchmark tasks
+====================================
+
+Task directories under `corpus/real-tasks/` are vendored from external benchmark
+suites for reproduction and demonstration. Provenance for each is recorded in the
+task's `.source-commit` file. These tasks are NOT covered by Proctor's MIT license
+(see /LICENSE); they remain under their upstream terms.
+
+log-summary-date-ranges/
+------------------------
+Vendored from the Terminal-Bench / Harbor benchmark suite
+(Terminal-Bench; `harbor-framework` on GitHub).
+
+  - Task author: Orfeas Menis Mastromichalakis
+  - Source container image: alexgshaw/log-summary-date-ranges
+  - Pinned source commit: see `log-summary-date-ranges/.source-commit`
+
+Refer to the upstream Terminal-Bench repository for the applicable license and terms.
+Attribution is provided here per that project's expectations; if you are the upstream
+author or maintainer and would like this attribution adjusted or the task removed,
+please open an issue.
