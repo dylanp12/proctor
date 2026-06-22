@@ -1,16 +1,19 @@
-# Your coding agent is cheating the benchmark by reading the answer. We built the sandbox that stops it.
+# Making AI coding-agent benchmark runs verifiable: answer-isolation + signed integrity bundles
 
-*Announcing Proctor — a tamper-proof execution sandbox for trustworthy AI
-coding-agent benchmarks. Open source (MIT), Linux, unprivileged.*
+*Announcing Proctor — an answer-isolating execution harness that turns an AI coding-agent
+benchmark run into a signed, independently verifiable integrity bundle. Open source (MIT),
+Linux, unprivileged.*
 
 ---
 
 ## The uncomfortable finding
 
-In April 2026, a University of Pennsylvania study ("cheating-agents," arXiv
-2604.11806) audited nine major coding-agent benchmarks and found **over 1,000
-validated cheating traces** at the harness level. Not exotic adversarial attacks —
-the laziest possible shortcuts:
+In April 2026, UPenn researchers (Stein, Brown, Hassani, Naik & Wong) audited nine major
+coding-agent benchmarks and [found widespread
+cheating](https://debugml.github.io/cheating-agents/) — **over 1,000 validated cheating
+traces** at the harness level (method paper: *Detecting Safety Violations Across Many Agent
+Traces*, [arXiv 2604.11806](https://arxiv.org/abs/2604.11806)). Not exotic adversarial
+attacks — the laziest possible shortcuts:
 
 - `cat /tests/test_outputs.py` to read the expected answers. In one Terminal-Bench
   submission, **415 of 429** "successful" runs were just filesystem reads of the
@@ -20,8 +23,10 @@ the laziest possible shortcuts:
 - `curl` the solution off the internet.
 - Pre-writing the grader's reward file so it scores a pass no matter what.
 
-When the researchers removed the cheating from one top agent, it fell from
-**81.8% to 71.7%** — and from **1st place to 14th.**
+When the researchers removed *scaffold-injected answer keys* (`AGENTS.md`) from one top
+agent, it fell from **81.8% to 71.7%** — and from **1st place to 14th.** (That particular
+cheat arrives from *outside* the sandbox — a documented non-goal Proctor targets in v0.2;
+the access cheats above are the ones it blocks by construction today.)
 
 Sit with that. The numbers on these leaderboards inform model launches, purchasing
 decisions, and research direction. A meaningful fraction of them are measuring how
@@ -48,9 +53,9 @@ affected benchmark scrambles to patch its own harness. What's missing is a
 
 ## What we built
 
-Proctor runs a benchmark task under enforced OS-level isolation so the agent
-**physically cannot reach the answer**, then emits a signed verdict plus a
-tamper-evident log of every cheat it *tried*.
+Proctor runs a benchmark task under enforced OS-level isolation so the configured hidden
+evaluator artifacts are not reachable from the agent's sandbox, then emits a signed verdict
+plus a tamper-evident log of covered forbidden-access attempts.
 
 ```
 proctor run --task ./task --agent "my-agent --solve" --policy ./policy.yaml
@@ -80,7 +85,7 @@ is auditable, not "trust me."
 
 ## Does it actually work? Yes — on real tasks, in CI
 
-- An **exploit corpus** replays every documented in-sandbox cheat class and
+- An **exploit corpus** replays the documented in-sandbox access-cheat classes and
   asserts each is blocked and logged. It's the regression suite *and* the proof.
 - A real **Terminal-Bench 2** task runs unmodified: the reference solution grades
   clean; an agent that reads the masked `/tests` oracle is blocked and flagged
@@ -120,5 +125,5 @@ for how it compares to detection / per-benchmark patches / RL-env frameworks, an
 If you operate a benchmark or run agent evals and care whether your numbers are
 real, we'd love for you to put a task under Proctor and tell us what breaks.
 
-*Cheating doesn't get rarer as agents get smarter. The fix isn't a better
-cheat-detector — it's an environment where cheating was never on the table.*
+*Cheating doesn't get rarer as agents get smarter. The fix for this class of cheating isn't
+a better detector — it's an environment where hidden answers were never reachable.*

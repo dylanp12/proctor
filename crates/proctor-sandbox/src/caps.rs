@@ -82,7 +82,18 @@ mod tests {
 
     #[test]
     fn probe_reports_all_capabilities_on_a_sandbox_capable_host() {
+        // A host that cannot sandbox (e.g. Ubuntu 24.04 with unprivileged user
+        // namespaces disabled by default) is not a Proctor failure — skip loudly
+        // so a fresh clone's `cargo test` never shows a spurious red. CI sets
+        // PROCTOR_REQUIRE_SANDBOX=1 to turn this back into a hard assertion.
         let c = probe();
+        if std::env::var_os("PROCTOR_REQUIRE_SANDBOX").is_none() && !c.all() {
+            eprintln!(
+                "SKIP: host cannot sandbox ({c:?}); see README dev setup. \
+                 Set PROCTOR_REQUIRE_SANDBOX=1 to make this a hard assertion (CI does)."
+            );
+            return;
+        }
         assert!(c.userns, "unprivileged user namespaces unavailable");
         assert!(c.all(), "host cannot sandbox: {c:?}");
     }

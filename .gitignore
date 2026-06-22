@@ -18,3 +18,6 @@
 corpus/real-tasks/out/
 corpus/real-tasks/swebench-out/
 corpus/real-tasks/.swebench-cache/
+
+# internal launch materials (Show HN draft, outreach) — not public
+launch/

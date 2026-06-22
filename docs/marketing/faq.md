@@ -10,6 +10,8 @@
 | **Session replays** | Read-only HTML of a finished run | No enforcement, no isolation, no live grading. A record, not a guard. |
 | **Containers (Docker) alone** | Package/runtime for the task environment | A container still ships the test files, git history, and network to the agent unless something hides them. Proctor *uses* a rootfs (incl. a container image) but adds the masking, repo sanitization, cut network, and signed verdict. |
 | **microVM / hypervisor isolation** (Firecracker, gVisor, etc.) | Strong host-from-guest security boundary | Solves the *wrong* threat (kernel escape), at boot/emulation cost. It doesn't, by itself, hide the *answer* from the agent or produce a signed integrity verdict. |
+| **The published checklists** (UPenn / Berkeley RDI integrity recommendations) | Name the fix ("isolate the agent from the evaluator") + list good practices (canary tokens, privilege separation) | A paper, not a runtime: it doesn't run unprivileged in CI, mask the oracle, or sign a verdict. Proctor is a runnable implementation of that minimum bar, and already asserts the canary-token rec in CI. |
+| **Grader-hardening** (Hacker-Fixer loops, Terminal-Bench 2.1 task fixes) | Harden the verifier so `PASS`-greps / mocks / hardcoded outputs fail | The *complementary half*: it fixes the grader; Proctor isolates the agent. Two halves of one trustworthy run (grader-hardening is Proctor's explicit later phase). |
 | **Proctor** | Runs the task so the answer is **not reachable** (by construction) + a **signed, tamper-evident** verdict | In-sandbox access cheats only (by design — see "What can't it stop?"). |
 
 **The short version:** everyone else either detects cheating after it happens,
@@ -34,6 +36,22 @@ microVM would add boot time and operational cost without addressing the actual
 problem (the answer being reachable). If a concrete escape threat ever justifies
 it, a microVM rootfs backend is a clean later addition — but it isn't what makes
 benchmarks trustworthy.
+
+**How is this different from AISI's Inspect Sandboxing Toolkit?**
+Different problem. Inspect and host-isolation sandboxes isolate the *host* from a
+potentially-dangerous agent — stopping escape and exfiltration when you run untrusted
+evals. Proctor isolates the *answer* from the agent — masking the oracle, git history, and
+network so the solution isn't reachable — and signs a tamper-evident integrity verdict.
+They compose: run Proctor's answer-isolation inside whatever host-isolation you already use.
+
+**Isn't this just the academic checklist, implemented?**
+Partly — and that's the point. The UPenn and Berkeley RDI writeups *name* the fix
+("isolate the agent from the evaluator — non-negotiable") and list good practices. Naming a
+fix isn't running it. Proctor is the unprivileged, signed, multi-benchmark runtime that
+enforces it — and it already implements their canary-token recommendation: every corpus
+test plants a random nonce as the "answer" and proves the agent never sees it, asserted in
+CI. Building the runtime that makes the checklist real, across benchmarks, is the un-done
+hard part.
 
 **Can the agent just bypass the seccomp monitor?**
 It can try, and it still gains nothing. **Isolation is enforced by the mounts and
@@ -90,9 +108,9 @@ Proctor runs a real SWE-bench instance with fix history stripped and, with
 `--grade`, runs the instance's tests through the isolated grader over a host
 network in CI — proving the pipeline and the integrity verdict (the git-mining
 cheat is blocked + `compromised`). A *faithful* per-instance resolved-grade needs
-that instance's pinned environment (specific interpreter/dependency versions); a
-pinned-image rootfs backend is the clean next step. See the
-[grading report](../reports/2026-06-12-swebench-grading.md).
+that instance's pinned environment (specific interpreter/dependency versions), which the
+`--image` backend now runs against. See the
+[grading report](../reports/2026-06-12-swebench-grading-pinned.md).
 
 **Why Linux-only?**
 Coding-agent benchmarks run on Linux, so the harness does too. We don't ship
