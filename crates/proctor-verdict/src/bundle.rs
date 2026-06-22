@@ -106,15 +106,16 @@ impl Bundle {
         verdict: Verdict,
         violations_path: &Path,
         artifacts: &[Artifact],
+        environment: Option<Environment>,
     ) -> Result<Bundle, BundleError> {
         Ok(Bundle {
-            bundle_version: 1,
+            bundle_version: if environment.is_some() { 2 } else { 1 },
             verdict,
             violations: read_records(violations_path)?,
             manifest: Manifest {
                 artifacts: artifacts.to_vec(),
             },
-            environment: None,
+            environment,
         })
     }
 
@@ -209,7 +210,7 @@ mod tests {
             reward: None,
         }
         .sign(signer);
-        Bundle::build(verdict, &vpath, &arts).unwrap()
+        Bundle::build(verdict, &vpath, &arts, None).unwrap()
     }
 
     #[test]

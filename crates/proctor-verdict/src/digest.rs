@@ -106,6 +106,14 @@ pub fn env_digest_of(e: &crate::bundle::Environment) -> String {
     ])
 }
 
+/// Raw SHA-256 hex of bytes — used to record the policy/spec hashes in the
+/// bundle's `Environment` so a verifier can confirm what the run was given.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(bytes);
+    hex::encode(h.finalize())
+}
+
 /// Digest of arbitrary labeled byte blobs (policy yaml, spec json, versions).
 pub fn env_digest(parts: &[(&str, &[u8])]) -> String {
     let mut sorted: Vec<&(&str, &[u8])> = parts.iter().collect();
