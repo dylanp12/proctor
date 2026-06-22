@@ -38,12 +38,31 @@ pub struct Manifest {
     pub artifacts: Vec<Artifact>,
 }
 
+/// The recorded run environment (bundle v2+): cleartext, so a verifier can read
+/// *what* ran and recompute `env_digest` over it (see `digest::env_digest_of`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Environment {
+    pub agent_command: String,
+    /// "host" | "image"
+    pub rootfs_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_digest: Option<String>,
+    pub proctor_version: String,
+    pub proctor_commit: String,
+    pub policy_sha256: String,
+    pub spec_sha256: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bundle {
     pub bundle_version: u32,
     pub verdict: Verdict,
     pub violations: Vec<serde_json::Value>,
     pub manifest: Manifest,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<Environment>,
 }
 
 /// Hash a set of (name, host-path) artifacts; missing files are skipped.
@@ -93,6 +112,7 @@ impl Bundle {
             manifest: Manifest {
                 artifacts: artifacts.to_vec(),
             },
+            environment: None,
         })
     }
 
@@ -230,5 +250,38 @@ mod tests {
         let mut b = good_bundle(d.path(), &Signer::generate());
         b.manifest.artifacts[0].sha256 = "00".repeat(32);
         assert!(matches!(b.verify(None), Err(BundleError::Artifacts)));
+    }
+
+    #[test]
+    fn bundle_v2_round_trips_environment() {
+        let env = Environment {
+            agent_command: "agent --solve".into(),
+            rootfs_kind: "image".into(),
+            image_ref: Some("ghcr.io/x/y@sha256:abc".into()),
+            image_digest: Some("abc".into()),
+            proctor_version: "0.1.0".into(),
+            proctor_commit: "deadbee".into(),
+            policy_sha256: "p".into(),
+            spec_sha256: "s".into(),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        let back: Environment = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.agent_command, "agent --solve");
+        assert_eq!(back.image_digest.as_deref(), Some("abc"));
+    }
+
+    #[test]
+    fn bundle_v1_without_environment_still_loads() {
+        // Verdict uses #[serde(flatten)] for body, so the verdict object is flat
+        // and must carry the required proctor_version. No `environment` key = v1.
+        let j = r#"{"bundle_version":1,
+          "verdict":{"task_id":"t","pass":true,"status":"clean",
+            "violations_head":"0000000000000000000000000000000000000000000000000000000000000000",
+            "violations_count":0,"env_digest":"e","artifacts_digest":"a",
+            "proctor_version":"0.1.0","public_key":"00","signature":"00"},
+          "violations":[],"manifest":{"artifacts":[]}}"#;
+        let b: Bundle = serde_json::from_str(j).unwrap();
+        assert_eq!(b.bundle_version, 1);
+        assert!(b.environment.is_none());
     }
 }
