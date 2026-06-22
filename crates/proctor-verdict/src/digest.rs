@@ -98,7 +98,10 @@ pub fn env_digest_of(e: &crate::bundle::Environment) -> String {
         ("agent_command", e.agent_command.as_bytes()),
         ("rootfs_kind", e.rootfs_kind.as_bytes()),
         ("image_ref", e.image_ref.as_deref().unwrap_or("").as_bytes()),
-        ("image_digest", e.image_digest.as_deref().unwrap_or("").as_bytes()),
+        (
+            "image_digest",
+            e.image_digest.as_deref().unwrap_or("").as_bytes(),
+        ),
         ("proctor_version", e.proctor_version.as_bytes()),
         ("proctor_commit", e.proctor_commit.as_bytes()),
         ("policy_sha256", e.policy_sha256.as_bytes()),
