@@ -5,6 +5,9 @@ party verifies. This document defines what's in it, what `proctor verify-bundle`
 **precisely what a verifier can and cannot conclude**. The scope discipline here is
 deliberate: an integrity artifact that implies more than it proves is worse than none.
 
+A real signed example — a run where a masked-oracle read was caught — lives in
+[`examples/`](examples/); verify it yourself with `proctor verify-bundle`.
+
 ## What's in `bundle.json`
 
 ```jsonc

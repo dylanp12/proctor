@@ -107,7 +107,8 @@ the core:
 **[usage](docs/usage.md)** to run your first task. For the full design and threat model see
 the **[design spec](docs/superpowers/specs/2026-06-09-proctor-design.md)** and the
 **[FAQ](docs/marketing/faq.md)**. The **[bundle spec](docs/bundle-spec.md)** defines exactly
-what a verifier can — and cannot — conclude from a signed run.
+what a verifier can — and cannot — conclude from a signed run, with a verifiable
+**[example bundle](docs/examples/)**.
 
 ## Roadmap
 
