@@ -90,6 +90,22 @@ pub fn artifacts_digest(artifacts: &[crate::bundle::Artifact]) -> String {
     env_digest(&parts)
 }
 
+/// Fold a recorded `Environment` into a single digest. This is what a run stores
+/// in the signed `env_digest` field, and what `verify-bundle` recomputes from the
+/// bundle's recorded environment to confirm the binding (v2+).
+pub fn env_digest_of(e: &crate::bundle::Environment) -> String {
+    env_digest(&[
+        ("agent_command", e.agent_command.as_bytes()),
+        ("rootfs_kind", e.rootfs_kind.as_bytes()),
+        ("image_ref", e.image_ref.as_deref().unwrap_or("").as_bytes()),
+        ("image_digest", e.image_digest.as_deref().unwrap_or("").as_bytes()),
+        ("proctor_version", e.proctor_version.as_bytes()),
+        ("proctor_commit", e.proctor_commit.as_bytes()),
+        ("policy_sha256", e.policy_sha256.as_bytes()),
+        ("spec_sha256", e.spec_sha256.as_bytes()),
+    ])
+}
+
 /// Digest of arbitrary labeled byte blobs (policy yaml, spec json, versions).
 pub fn env_digest(parts: &[(&str, &[u8])]) -> String {
     let mut sorted: Vec<&(&str, &[u8])> = parts.iter().collect();
@@ -131,6 +147,26 @@ mod tests {
         assert_eq!(a, b);
         let c = env_digest(&[("policy", b"x"), ("spec", b"z")]);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn env_digest_of_is_stable_and_field_sensitive() {
+        use crate::bundle::Environment;
+        let base = Environment {
+            agent_command: "a".into(),
+            rootfs_kind: "host".into(),
+            image_ref: None,
+            image_digest: None,
+            proctor_version: "0.1.0".into(),
+            proctor_commit: "c".into(),
+            policy_sha256: "p".into(),
+            spec_sha256: "s".into(),
+        };
+        let d1 = env_digest_of(&base);
+        assert_eq!(d1, env_digest_of(&base.clone()), "stable");
+        let mut changed = base.clone();
+        changed.agent_command = "b".into();
+        assert_ne!(d1, env_digest_of(&changed), "sensitive to agent_command");
     }
 
     #[test]

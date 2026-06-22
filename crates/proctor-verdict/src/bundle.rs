@@ -2,7 +2,7 @@
 //! verdict + the violation records + a manifest of agent-log hashes, all bound
 //! under the verdict's single ed25519 signature.
 
-use crate::digest::{artifacts_digest, chain_head};
+use crate::digest::{artifacts_digest, chain_head, env_digest_of};
 use crate::verdict::Verdict;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -24,6 +24,8 @@ pub enum BundleError {
     Count,
     #[error("artifact hashes do not match the signed verdict")]
     Artifacts,
+    #[error("recorded environment does not match the signed env_digest")]
+    EnvMismatch,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +148,12 @@ impl Bundle {
         // 3. the agent-log hashes are the ones that were signed
         if artifacts_digest(&self.manifest.artifacts) != self.verdict.body.artifacts_digest {
             return Err(BundleError::Artifacts);
+        }
+        // 4. (v2+) the recorded environment recomputes to the signed env_digest
+        if let Some(env) = &self.environment {
+            if env_digest_of(env) != self.verdict.body.env_digest {
+                return Err(BundleError::EnvMismatch);
+            }
         }
         Ok(())
     }
@@ -283,5 +291,42 @@ mod tests {
         let b: Bundle = serde_json::from_str(j).unwrap();
         assert_eq!(b.bundle_version, 1);
         assert!(b.environment.is_none());
+    }
+
+    #[test]
+    fn verify_fails_on_tampered_environment() {
+        let env = Environment {
+            agent_command: "agent --solve".into(),
+            rootfs_kind: "host".into(),
+            image_ref: None,
+            image_digest: None,
+            proctor_version: "0.1.0".into(),
+            proctor_commit: "c".into(),
+            policy_sha256: "p".into(),
+            spec_sha256: "s".into(),
+        };
+        let signer = Signer::generate();
+        let arts: Vec<Artifact> = vec![];
+        let verdict = VerdictBuilder {
+            task_id: "t".into(),
+            pass: true,
+            status: Status::Clean,
+            violations_head: crate::digest::GENESIS.into(),
+            violations_count: 0,
+            env_digest: env_digest_of(&env),
+            artifacts_digest: artifacts_digest(&arts),
+            reward: None,
+        }
+        .sign(&signer);
+        let mut b = Bundle {
+            bundle_version: 2,
+            verdict,
+            violations: vec![],
+            manifest: Manifest { artifacts: vec![] },
+            environment: Some(env),
+        };
+        assert!(b.verify(None).is_ok(), "good v2 bundle verifies");
+        b.environment.as_mut().unwrap().image_digest = Some("tampered".into());
+        assert!(matches!(b.verify(None), Err(BundleError::EnvMismatch)));
     }
 }
