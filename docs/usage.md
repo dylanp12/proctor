@@ -178,7 +178,7 @@ To skip the ~1 min source build, point the action at a published release — it
 ```yaml
 - uses: dylanp12/proctor@main
   with:
-    proctor-version: v0.1.0        # download the prebuilt binary (skips the build)
+    proctor-version: v0.1.1        # download the prebuilt binary (skips the build)
     run-args: run --task ./task --agent "sh /workspace/solve.sh" --policy ./policy.yaml
 ```
 

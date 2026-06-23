@@ -118,7 +118,7 @@ cross-platform shims for an audience that doesn't exist; the isolation primitive
 (namespaces, overlayfs, seccomp) are Linux's.
 
 **Is it production-ready / released?**
-v1 is implemented and released (prebuilt v0.1.0 binary + `cargo install`), the full
+v1 is implemented and released (prebuilt v0.1.1 binary + `cargo install`), the full
 suite is green in CI on a stock GitHub runner, and the exploit corpus asserts every
 documented in-sandbox cheat class is blocked and logged. It's MIT-licensed.
 

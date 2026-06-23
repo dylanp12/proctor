@@ -182,7 +182,7 @@ more benchmark adapters; pinned-image resolved-grading for SWE-bench.
 
 ```
 # prebuilt binary (Linux x86_64)
-gh release download v0.1.0 --repo dylanp12/proctor \
+gh release download v0.1.1 --repo dylanp12/proctor \
   --pattern 'proctor-x86_64-unknown-linux-gnu.tar.gz*'
 sha256sum -c proctor-x86_64-unknown-linux-gnu.tar.gz.sha256
 tar -xzf proctor-x86_64-unknown-linux-gnu.tar.gz && ./proctor-x86_64-unknown-linux-gnu/proctor --version

@@ -100,7 +100,7 @@ the core:
 - **Real benchmark tasks, end-to-end:** a Terminal-Bench 2 task (reference solution →
   clean pass; oracle read → blocked + logged) and a SWE-bench instance
   (`proctor run-swebench`; `--grade` runs the tests through the isolated grader in CI).
-- **`proctor` as a GitHub Action** (`action.yml`) + a prebuilt **v0.1.0** binary, so a
+- **`proctor` as a GitHub Action** (`action.yml`) + a prebuilt **v0.1.1** binary, so a
   benchmark's CI can run under Proctor in a few lines.
 
 **New here?** Read **[Why Proctor](docs/marketing/why-proctor.md)** first, then
@@ -131,7 +131,7 @@ resolved-grading path.
 **Prebuilt binary** (Linux x86_64, glibc ≥ 2.35):
 
 ```
-gh release download v0.1.0 --repo dylanp12/proctor \
+gh release download v0.1.1 --repo dylanp12/proctor \
   --pattern 'proctor-x86_64-unknown-linux-gnu.tar.gz*'
 sha256sum -c proctor-x86_64-unknown-linux-gnu.tar.gz.sha256
 tar -xzf proctor-x86_64-unknown-linux-gnu.tar.gz

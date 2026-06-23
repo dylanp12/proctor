@@ -3,7 +3,7 @@
 All notable changes to Proctor. Format follows [Keep a Changelog](https://keepachangelog.com).
 Releases ship a prebuilt binary with a published `.sha256`.
 
-## [0.1.1] — unreleased
+## [0.1.1] — 2026-06-22
 
 The "verifiable integrity bundle" release: a Proctor run now records *what ran*, and a third
 party can confirm it.

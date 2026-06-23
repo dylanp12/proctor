@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-adapter-swebench"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proctor-policy",
  "serde",
@@ -495,7 +495,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-adapter-tb"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proctor-policy",
  "serde",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-grader"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proctor-policy",
  "proctor-sandbox",
@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-monitor"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hex",
  "libc",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-policy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "libseccomp",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "proctor-verdict"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ed25519-dalek",
  "hex",
