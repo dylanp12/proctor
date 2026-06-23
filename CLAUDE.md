@@ -1,7 +1,7 @@
 # Proctor
 
 > Context for anyone (human or agent) working in this repo. Read this first. It documents not just
-> *what* Proctor is, but *why it exists*, *what gap it fills*, and *what would make it worth killing*.
+> *what* Proctor is, but *why it exists*, *what gap it fills*, and *where its honest limits are*.
 > Keep the project honest to all three.
 
 **Status:** v1 implemented (2026-06-09) — M0–M9 complete, all tests green, the exploit
@@ -103,9 +103,9 @@ That is the problem Proctor exists to make go away — by construction.
 
 ## 3. The gap, and how Proctor fills it
 
-The demand side is enormous and real (Anthropic alone has discussed >$1B/yr on RL environments and
-runs a dedicated "Environment Scaling" team that explicitly staffs reward-hacking QA). But the supply
-side has a specific hole:
+The demand side is real and growing (frontier labs are investing heavily in RL environments and
+eval integrity, with dedicated teams staffing reward-hacking QA). But the supply side has a
+specific hole:
 
 | What exists today | What it does | The gap |
 | --- | --- | --- |
@@ -249,27 +249,23 @@ optional microVM backend *only if* a concrete threat ever justifies it (it does 
 
 ---
 
-## 8. Success criteria & the honest off-ramps
+## 8. Success criteria & honest risks
 
-**v1 is "done" when** the corpus replay (M9) shows every documented exploit class blocked and logged,
-a real Terminal-Bench task runs unmodified under Proctor, and the result + harness are published.
+**v1 is "done" when** the corpus replay (M9) shows the covered in-sandbox access-cheat classes
+blocked and logged, a real Terminal-Bench task runs unmodified under Proctor, and the result +
+harness are published.
 
-**This succeeds as a project if** a benchmark operator or a lab eval team *adopts or pilots* it (the
-real, non-technical gamble — see risks), or it establishes the author as a credible voice on
-agent-evaluation integrity.
+**The load-bearing risk is adoption, not technology.** Proctor's value depends on benchmark
+operators or lab eval teams actually running evals under it, or building on the bundle format.
+Operators have historically patched their own harnesses ad hoc after an exploit goes public
+(Terminal-Bench self-patched within days of the UPenn paper), so being the *general, adoptable,
+multi-benchmark* standard — with a runnable corpus and a verifiable bundle format — rather than a
+one-benchmark patch, is what earns adoption.
 
-**Kill / reassess signals (be honest about these):**
-- After the corpus launch *and* a genuine outreach effort, no operator or lab shows interest in
-  running it — i.e., everyone is content to in-house ad-hoc patches. (The adoption risk is the
-  load-bearing one; Terminal-Bench self-patched within days of the UPenn paper.)
-- A funded vendor (Prime Intellect, an eval startup, or a lab) ships a general, adoptable
-  isolation-harness standard first and gives it away.
-- The work drifts off the systems/isolation core toward reward/grader *design* — at which point the
-  systems-engineering edge evaporates and it becomes an ML-research project this team shouldn't run.
-
-If we hit a kill signal, the banked fallback is a deterministic record-replay / time-travel debugger
-for agent runs (an adjacent hard-systems problem that reuses much of the same isolation/trajectory
-work).
+**Stay on the systems/isolation core.** If the work drifts toward reward/grader *design*, that's a
+different (ML-research) project; Proctor's edge is the isolation + attestation systems work. The
+honest scope boundary (see README) is part of the credibility: an integrity tool that overclaims is
+worse than none.
 
 ---
 

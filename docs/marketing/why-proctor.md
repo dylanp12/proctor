@@ -1,11 +1,12 @@
 # Why Proctor
 
-**A tamper-proof execution sandbox for trustworthy AI coding-agent benchmarks.**
+**An answer-isolating execution harness for AI coding-agent benchmarks — it turns a run
+into a signed, independently verifiable integrity bundle.**
 
 If you run a coding-agent benchmark, your leaderboard is probably wrong — not
 because the models are mis-measured, but because the agents are reaching the
-answer instead of solving the task. Proctor makes that impossible by
-construction, and signs a tamper-evident record of every attempt.
+answer instead of solving the task. Proctor isolates that answer from the agent
+by construction, and signs a tamper-evident record of covered forbidden-access attempts.
 
 ---
 
@@ -14,10 +15,13 @@ construction, and signs a tamper-evident record of every attempt.
 AI coding-agent benchmarks drive billions of dollars in model decisions, hiring,
 and procurement. They are also leaky.
 
-An April 2026 University of Pennsylvania study ("cheating-agents", arXiv
-2604.11806) found **1,000+ validated harness-level cheating traces** across nine
-major coding-agent benchmarks — concentrated in Terminal-Bench 2 and HAL USACO,
-plus dozens of task-level cases. The exploits are mundane and devastating:
+In April 2026, UPenn researchers (Stein, Brown, Hassani, Naik & Wong) documented
+[widespread cheating on popular agent benchmarks](https://debugml.github.io/cheating-agents/) —
+**1,000+ validated harness-level cheating traces** across nine major coding-agent
+benchmarks, concentrated in Terminal-Bench 2 and HAL USACO, plus dozens of task-level
+cases (method paper: *Detecting Safety Violations Across Many Agent Traces*,
+[arXiv 2604.11806](https://arxiv.org/abs/2604.11806)). The exploits are mundane and
+devastating:
 
 - **Read the test oracle directly** — `cat /tests/test_outputs.py`. In one
   Terminal-Bench submission, **415 of 429** successful traces were plain
@@ -29,10 +33,15 @@ plus dozens of task-level cases. The exploits are mundane and devastating:
 - **Pre-write the grader's reward file**, hardcode return values for the exact
   test inputs, or replace a library with a mock.
 
-The impact is not marginal. Removing cheating dropped one top agent from
-**81.8% → 71.7%** pass rate and **1st → 14th** place. Leaderboards that teams,
-buyers, and labs treat as ground truth are contaminated — and the authors
-conclude this "will become more, not less, common as agents become more capable."
+The impact is not marginal — and it's worth being precise about which cheat caused it.
+The study's most dramatic single result, one top agent falling from **81.8% → 71.7%** and
+**1st → 14th**, came from *scaffold-injected answer keys* (`AGENTS.md`) — a cheat that
+arrives from **outside** the sandbox. That class is a documented non-goal here and the
+target of [Proctor's v0.2 provenance work](#roadmap); the access cheats listed above —
+oracle reads, git-mining, `curl`, reward-file pre-writes — are the ones Proctor kills by
+construction today. Either way, leaderboards that teams, buyers, and labs treat as ground
+truth are contaminated, and the authors conclude this "will become more, not less, common
+as agents become more capable."
 
 ## Why it happens: it's a sandboxing failure, not a modeling one
 
@@ -116,8 +125,8 @@ it adoptable as a shared standard rather than yet another in-housed patch.
 
 ## Proof it works
 
-- **The exploit corpus** ([`corpus/`](../../corpus/)) replays every documented
-  in-sandbox cheat class and asserts each is **blocked and logged** — it's both the
+- **The exploit corpus** ([`corpus/`](../../corpus/)) replays the documented
+  in-sandbox access-cheat classes and asserts each is **blocked and logged** — it's both the
   regression suite and the credibility artifact.
 - **Real tasks, end-to-end:** a Terminal-Bench 2 task and a SWE-bench instance,
   with before/after reports.
@@ -133,7 +142,8 @@ not pretend to do more:
 
 - It does not block answers that arrive from **outside** the sandbox — a scaffold
   that injects an answer key into the agent's prompt, or a solution smuggled
-  inside the agent binary. Those need submission-provenance policy, not isolation.
+  inside the agent binary. Those need submission-provenance policy, not isolation — the
+  focus of [v0.2 (see Roadmap)](#roadmap).
 - It does not yet harden the **grader** against `PASS`-greps, hardcoded outputs,
   or mocks — that's a later phase.
 - Faithful per-instance *resolved-grading* of a benchmark like SWE-bench needs
@@ -142,6 +152,22 @@ not pretend to do more:
 
 We state the boundary plainly because an integrity tool that overclaims is worse
 than none.
+
+## Roadmap
+
+Isolation ships today; the next layer answers the limitation above.
+
+**v0.2 — attested submission provenance.** The cheats isolation can't stop are the ones the
+submitter carries *in*: an answer key injected through the agent's scaffold (`AGENTS.md` —
+the class behind the study's 1st→14th drop) or baked into the agent binary. You can't mask
+an answer that was never reached for. v0.2 attacks it from the other side: Proctor captures
+and content-addresses every input the agent was handed (scaffold, instruction files, binary,
+environment) and binds a signed **submission manifest** into the run bundle — turning "what
+was this agent fed?" into a verifiable, tamper-evident fact. It's the same move as the
+violation log, one layer up: attest the inputs, don't trust them.
+
+**Later, if demand pulls it:** grader hardening (`PASS`-greps, hardcoded outputs, mocks);
+more benchmark adapters; pinned-image resolved-grading for SWE-bench.
 
 ## Who it's for
 

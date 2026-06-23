@@ -6,7 +6,8 @@ use proctor_grader::{grade, GradeProtocol, GradeRequest};
 use proctor_policy::{NetworkMode, Policy};
 use proctor_sandbox::spawn::{run_sandboxed, InitInvoker};
 use proctor_sandbox::spec::{NetSpec, RootfsSpec, SandboxSpec};
-use proctor_verdict::digest::env_digest;
+use proctor_verdict::bundle::Environment;
+use proctor_verdict::digest::{env_digest_of, sha256_hex};
 use proctor_verdict::verdict::{Status, Verdict, VerdictBuilder};
 use std::path::Path;
 
@@ -32,12 +33,18 @@ fn artifacts_digest_for(session: &Path) -> Result<String> {
 }
 
 /// write the portable bundle.json from the signed verdict + violations + logs
-fn write_bundle(verdict: &Verdict, session: &Path, out: &Path) -> Result<()> {
+fn write_bundle(
+    verdict: &Verdict,
+    session: &Path,
+    out: &Path,
+    environment: Environment,
+) -> Result<()> {
     let arts = proctor_verdict::bundle::hash_artifacts(&agent_log_artifacts(session))?;
     let bundle = proctor_verdict::bundle::Bundle::build(
         verdict.clone(),
         &out.join("violations.jsonl"),
         &arts,
+        Some(environment),
     )?;
     bundle.save(&out.join("bundle.json"))?;
     Ok(())
@@ -163,14 +170,19 @@ pub fn run(
     )
     .context("grade")?;
 
-    // env digest binds policy + spec + tool versions
+    // bind + record the run environment so verify-bundle can recompute it
     let spec_json = serde_json::to_vec(&spec)?;
-    let versions = format!("proctor={}", env!("CARGO_PKG_VERSION"));
-    let digest = env_digest(&[
-        ("policy", policy_yaml.as_bytes()),
-        ("spec", &spec_json),
-        ("versions", versions.as_bytes()),
-    ]);
+    let environment = Environment {
+        agent_command: agent_cmd.to_string(),
+        rootfs_kind: "host".into(),
+        image_ref: None,
+        image_digest: None,
+        proctor_version: env!("CARGO_PKG_VERSION").into(),
+        proctor_commit: env!("PROCTOR_GIT_COMMIT").into(),
+        policy_sha256: sha256_hex(policy_yaml.as_bytes()),
+        spec_sha256: sha256_hex(&spec_json),
+    };
+    let digest = env_digest_of(&environment);
 
     let signer =
         proctor_verdict::sign::resolve_signer(signing_seed, out).map_err(|e| anyhow::anyhow!(e))?;
@@ -199,7 +211,7 @@ pub fn run(
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
-    write_bundle(&verdict, &session, out)?;
+    write_bundle(&verdict, &session, out, environment)?;
     Ok(verdict)
 }
 
@@ -334,12 +346,21 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
 
     let spec_json = serde_json::to_vec(&spec)?;
     let policy_yaml = plan.policy.to_yaml().context("policy to yaml")?;
-    let versions = format!("proctor={}", env!("CARGO_PKG_VERSION"));
-    let digest = env_digest(&[
-        ("policy", policy_yaml.as_bytes()),
-        ("spec", &spec_json),
-        ("versions", versions.as_bytes()),
-    ]);
+    let rootfs_kind = match &spec.rootfs {
+        RootfsSpec::HostSystem => "host",
+        _ => "image",
+    };
+    let environment = Environment {
+        agent_command: agent_cmd.to_string(),
+        rootfs_kind: rootfs_kind.into(),
+        image_ref: None,
+        image_digest: None,
+        proctor_version: env!("CARGO_PKG_VERSION").into(),
+        proctor_commit: env!("PROCTOR_GIT_COMMIT").into(),
+        policy_sha256: sha256_hex(policy_yaml.as_bytes()),
+        spec_sha256: sha256_hex(&spec_json),
+    };
+    let digest = env_digest_of(&environment);
 
     let signer =
         proctor_verdict::sign::resolve_signer(None, out).map_err(|e| anyhow::anyhow!(e))?;
@@ -367,7 +388,7 @@ pub fn run_tb(task: &Path, agent_cmd: &str, out: &Path, use_image: bool) -> Resu
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
-    write_bundle(&verdict, &session, out)?;
+    write_bundle(&verdict, &session, out, environment)?;
     Ok(verdict)
 }
 
@@ -528,12 +549,21 @@ pub fn run_swebench(
 
     let spec_json = serde_json::to_vec(&spec)?;
     let policy_yaml = plan.policy.to_yaml().context("policy to yaml")?;
-    let versions = format!("proctor={}", env!("CARGO_PKG_VERSION"));
-    let digest = env_digest(&[
-        ("policy", policy_yaml.as_bytes()),
-        ("spec", &spec_json),
-        ("versions", versions.as_bytes()),
-    ]);
+    let (rootfs_kind, image_ref) = match &spec.rootfs {
+        RootfsSpec::HostSystem => ("host", None),
+        _ => ("image", plan.image.clone()),
+    };
+    let environment = Environment {
+        agent_command: agent_cmd.to_string(),
+        rootfs_kind: rootfs_kind.into(),
+        image_ref,
+        image_digest: None,
+        proctor_version: env!("CARGO_PKG_VERSION").into(),
+        proctor_commit: env!("PROCTOR_GIT_COMMIT").into(),
+        policy_sha256: sha256_hex(policy_yaml.as_bytes()),
+        spec_sha256: sha256_hex(&spec_json),
+    };
+    let digest = env_digest_of(&environment);
 
     let signer =
         proctor_verdict::sign::resolve_signer(None, out).map_err(|e| anyhow::anyhow!(e))?;
@@ -557,7 +587,7 @@ pub fn run_swebench(
     verdict
         .save(&out.join("verdict.json"))
         .context("write verdict")?;
-    write_bundle(&verdict, &session, out)?;
+    write_bundle(&verdict, &session, out, environment)?;
     Ok(verdict)
 }
 

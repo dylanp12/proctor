@@ -2,20 +2,35 @@
 
 [![demo](https://github.com/dylanp12/proctor/actions/workflows/demo.yml/badge.svg)](https://github.com/dylanp12/proctor/actions/workflows/demo.yml)
 
-**A tamper-proof execution sandbox for trustworthy AI coding-agent benchmarks.**
+**Proctor turns AI coding-agent benchmark runs into signed, independently verifiable
+integrity bundles.**
 
-AI coding-agent benchmarks are being gamed. An April 2026 University of Pennsylvania
-study (arXiv 2604.11806) found **1,000+ harness-level cheating traces** across major
-benchmarks — concentrated in Terminal-Bench 2 and HAL USACO — plus ~30 task-level
-cases. Agents read the test oracle (in one Terminal-Bench submission, 415 of 429
-successful traces were plain filesystem reads of `/tests`), mine `git log` for the fix
-commit, `curl` the solution, or pre-write the grader's reward file. De-cheating one top
-submission moved it from **1st to 14th** place. Every one of these is a
+It runs agents in an answer-isolated Linux sandbox where the configured hidden tests, fix
+history, and network egress are not reachable, then signs the verdict and the covered
+forbidden-access timeline.
+
+AI coding-agent benchmarks are being gamed. In April 2026, UPenn researchers (Stein,
+Brown, Hassani, Naik & Wong) documented [widespread cheating on popular agent
+benchmarks](https://debugml.github.io/cheating-agents/): **1,000+ harness-level cheating
+traces** across major benchmarks — concentrated in Terminal-Bench 2 and HAL USACO — plus
+~30 task-level cases (method paper: *Detecting Safety Violations Across Many Agent
+Traces*, [arXiv 2604.11806](https://arxiv.org/abs/2604.11806)). The cheats are mundane:
+agents read the test oracle (**in one removed Terminal-Bench 2 submission, 415 of 429
+successful traces were plain filesystem reads of `/tests`**), mine `git log` for the fix
+commit, `curl` the solution, or pre-write the grader's reward file. Every one of these is a
 sandboxing / access-control failure, not a modeling one.
 
-Proctor runs a benchmark task under enforced OS-level isolation so the agent
-**physically cannot reach the answer**, and emits a signed verdict plus a
-tamper-evident log of every cheat it *attempted*.
+> The study's most dramatic single number — a top submission falling from **1st to 14th**
+> once de-cheated — came from a *different* cheat class: answer keys injected through the
+> agent's scaffold (`AGENTS.md`). That arrives from **outside** the sandbox, so OS isolation
+> alone can't stop it — it's the target of Proctor's [v0.2 provenance work](#roadmap), and
+> we name that boundary plainly (see [Honest claim scope](#honest-claim-scope)) rather than
+> quietly claiming it.
+
+Proctor runs a benchmark task under enforced OS-level isolation so the configured hidden
+evaluator artifacts (oracle/tests, fix history, network) are not reachable from the agent's
+sandbox, and emits a signed verdict plus a tamper-evident log of covered forbidden-access
+attempts (masked-file reads, blocked egress).
 
 ```
 proctor run --task ./task --agent "my-agent --solve" --policy ./policy.yaml
@@ -54,27 +69,29 @@ format) is the first adapter (`proctor run-tb`); a SWE-bench adapter
 (`proctor run-swebench`) materializes the repo at the base commit with fix history
 stripped, and `--grade` runs the instance's tests through the isolated grader over the
 Host network on CI — see the
-[grading report](docs/reports/2026-06-12-swebench-grading.md), which also documents
+[grading report](docs/reports/2026-06-12-swebench-grading-pinned.md), which also documents
 the boundary: faithful per-instance resolved-grading needs SWE-bench's pinned
 environment, while Proctor's reproducible signal is the tamper-evident integrity
 verdict (the git-mining cheat is blocked + flagged `compromised`). `--image` runs
 the agent + grader inside the instance's pinned SWE-bench image (daemonless
 podman/docker fetch) with the gitsan'd repo still overlaid at `/testbed`.
 
-### Honest claim scope
+## Honest scope
 
 Proctor blocks **in-sandbox access** cheats — reaching the answer through the filesystem,
 git history, the network, or the process table. It does **not** block answers that arrive
 from *outside* the sandbox (a scaffold that injects answer keys into the agent's prompt,
-or solutions smuggled inside the agent binary) — those need submission-provenance policy —
-nor grader-fooling (`PASS`-greps, hardcoded outputs, mocks), which is a later phase. See
-[`corpus/RESULTS.md`](corpus/RESULTS.md) for the full per-class table.
+or solutions smuggled inside the agent binary) — those need submission-provenance policy,
+the focus of [v0.2](#roadmap) — nor grader-fooling (`PASS`-greps, hardcoded outputs, mocks),
+which is a later phase. See [`corpus/RESULTS.md`](corpus/RESULTS.md) for the full per-class
+table.
 
 ## Status
 
 **v1 implemented and released** (Linux, Rust, unprivileged). The exploit corpus
-([`corpus/`](corpus/)) replays every documented in-sandbox cheat class and asserts each
-is blocked and logged, and the full suite is **green in CI on a stock GitHub runner** —
+([`corpus/`](corpus/)) replays the documented in-sandbox access-cheat classes it covers and
+asserts each is blocked and logged, and the full suite is **green in CI on a stock GitHub
+runner** —
 so the sandbox provably establishes off-machine, not just on a dev box. Shipped on top of
 the core:
 
@@ -86,11 +103,28 @@ the core:
 - **`proctor` as a GitHub Action** (`action.yml`) + a prebuilt **v0.1.0** binary, so a
   benchmark's CI can run under Proctor in a few lines.
 
-**New here?** Read **[Why Proctor](docs/marketing/why-proctor.md)** first. For the full
-design and reasoning see **[CLAUDE.md](CLAUDE.md)**, the
-**[spec](docs/superpowers/specs/2026-06-09-proctor-design.md)**, the
-**[viability review](docs/superpowers/specs/2026-06-09-proctor-viability-review.md)**,
-and **[usage](docs/usage.md)**.
+**New here?** Read **[Why Proctor](docs/marketing/why-proctor.md)** first, then
+**[usage](docs/usage.md)** to run your first task. For the full design and threat model see
+the **[design spec](docs/superpowers/specs/2026-06-09-proctor-design.md)** and the
+**[FAQ](docs/marketing/faq.md)**. The **[bundle spec](docs/bundle-spec.md)** defines exactly
+what a verifier can — and cannot — conclude from a signed run, with a verifiable
+**[example bundle](docs/examples/)**.
+
+## Roadmap
+
+**v0.2 — attested submission provenance.** The biggest documented cheat Proctor can't yet
+stop is *out-of-sandbox* answer smuggling: answer keys injected through the agent's scaffold
+(`AGENTS.md`) or a solution compiled into the agent binary — the class behind the study's
+1st→14th drop. OS isolation can't see an answer the submitter carries in. v0.2 closes it
+from the other side: Proctor captures and content-addresses every input the agent was given
+(scaffold, instruction files, agent binary, environment) and binds a signed, tamper-evident
+**submission manifest** into the run bundle — so a reviewer can verify exactly what went in,
+not just what the agent reached for. Same philosophy as the violation log: *attest the
+inputs, don't trust them.*
+
+**Later (pulled by real demand):** grader hardening against `PASS`-greps / hardcoded
+outputs / mocked libraries; additional benchmark adapters; a pinned-image SWE-bench
+resolved-grading path.
 
 ## Install
 
@@ -106,7 +140,10 @@ proctor --version
 ```
 
 Needs `libseccomp2` (the runtime library) present — installed by default on most
-distributions (`sudo apt-get install -y libseccomp2` otherwise).
+distributions (`sudo apt-get install -y libseccomp2` otherwise). On Ubuntu 24.04 (and any
+distro that restricts unprivileged user namespaces) enable them once or every run fails:
+`sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. Run `proctor probe` to
+confirm your host can sandbox.
 
 **From source** with `cargo`:
 
@@ -114,6 +151,24 @@ distributions (`sudo apt-get install -y libseccomp2` otherwise).
 sudo apt-get install -y libseccomp-dev          # link-time libseccomp
 cargo install --git https://github.com/dylanp12/proctor proctor-cli
 ```
+
+## Verify it yourself (60 seconds)
+
+The corpus is the proof: five documented in-sandbox cheat classes, each replayed as a test
+that plants a random nonce as the "answer" and asserts the agent never sees it.
+
+```
+git clone https://github.com/dylanp12/proctor && cd proctor
+./scripts/dev-setup.sh        # links libseccomp for the build
+# Ubuntu 24.04 (incl. the GitHub CI runner) disables unprivileged user namespaces by
+# default — enable once, or every sandbox run fails:
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+cargo test -p proctor-cli --test corpus_test -- --nocapture
+```
+
+Each test builds a task, runs an agent that *tries* the cheat, and asserts it's blocked
+(and, where a syscall is issued against a masked resource, logged). See
+[`corpus/RESULTS.md`](corpus/RESULTS.md) for the per-class table.
 
 ## Building
 
