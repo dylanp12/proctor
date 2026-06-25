@@ -53,13 +53,13 @@ always 1; plus images ship no pytest. Both fixed.) See
 ## 1. What Proctor is
 
 Proctor is a harness that runs a coding-agent benchmark task under enforced OS-level isolation, so
-the agent **physically cannot reach the task's answer** — the oracle/test files, the fix-commit git
-history, or the network — and emits a **signed verdict** plus a **tamper-evident log of every cheat
-the agent attempted**.
+the configured hidden evaluator artifacts — the oracle/test files, the fix-commit git
+history, the network — are **not reachable from the agent's sandbox**, and it emits a **signed
+verdict** plus a **tamper-evident log of every covered cheat the agent attempted**.
 
-In one line: **a tamper-proof execution sandbox for trustworthy agent benchmarks.** You hand it a
-task, an agent command, and a policy; it gives back a result you can trust and a record of everything
-the agent tried to cheat with.
+In one line: **an answer-isolating execution sandbox that emits a signed, independently verifiable
+integrity bundle.** You hand it a task, an agent command, and a policy; it gives back a verifiable
+result and a record of every covered forbidden-access attempt.
 
 ```
 proctor run --task ./task --agent "my-agent --solve" --policy ./policy.yaml
@@ -79,8 +79,8 @@ validated cheating instances across 9 major coding-agent benchmarks** (Terminal-
 SWE-rebench, SWE-smith, HAL USACO, CyBench, BountyBench, and more). The exploits are mundane and
 devastating:
 
-- reading the test oracle directly — `cat /tests/test_outputs.py` (415 of 429 Terminal-Bench 2
-  traces were plain filesystem reads of the answer)
+- reading the test oracle directly — `cat /tests/test_outputs.py` (in one removed submission,
+  415 of 429 successful runs were plain filesystem reads of the answer)
 - hardcoding return values for the exact test inputs
 - printing `PASS` against a grader that only greps output for the string "PASS"
 - running `git log` to find the fix commit and copying the historical patch
