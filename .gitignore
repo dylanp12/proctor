@@ -21,3 +21,8 @@ corpus/real-tasks/.swebench-cache/
 
 # internal launch materials (Show HN draft, outreach) — not public
 launch/
+
+# website (Astro)
+site/node_modules/
+site/dist/
+site/.astro/
