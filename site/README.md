@@ -1,49 +1,40 @@
-# Starlight Starter Kit: Basics
+# Proctor website (`proctorbench.dev`)
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+Astro + Starlight static site: a custom landing (`/`), docs (`/docs/*`, sourced from the repo's
+markdown), and the cornerstone post (`/blog/*`). Builds to `site/dist`.
 
-```
-npm create astro@latest -- --template starlight
-```
+## Local development
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and files:
-
-```
-.
-├── public/
-├── src/
-│   ├── assets/
-│   ├── content/
-│   │   └── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+```sh
+cd site
+npm install
+npm run dev        # http://localhost:4321
+npm run build      # static output -> site/dist
+npm run preview    # serve the built site
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+## Deploy — Cloudflare Pages (free)
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+The site is **domain-agnostic**: it builds and serves on the `*.pages.dev` subdomain today; the
+custom domain is attached when `proctorbench.dev` is registered. The canonical URL in
+`astro.config.mjs` (`site: 'https://proctorbench.dev'`) is already set, so sitemap/canonical tags
+are correct the moment the domain points here.
 
-Static assets, like favicons, can be placed in the `public/` directory.
+1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git** → the
+   `dylanp12/proctor` repo.
+2. Build settings:
+   - **Production branch:** `main`
+   - **Framework preset:** Astro
+   - **Build command:** `npm run build`
+   - **Build output directory:** `dist`
+   - **Root directory:** `site`
+3. Deploy → live at `https://<project>.pages.dev`.
 
-## 🧞 Commands
+### Attach the custom domain (after registering `proctorbench.dev`)
 
-All commands are run from the root of the project, from a terminal:
+4. Pages project → **Custom domains → Set up a domain** → `proctorbench.dev` (and `www`).
+5. If the domain's DNS is on Cloudflare, the records are added automatically; otherwise add the
+   shown `CNAME`. HTTPS is provisioned automatically. No `astro.config` change needed.
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+> Vercel is an equivalent fallback: import the repo, set **Root Directory** to `site`; Astro is
+> auto-detected.
