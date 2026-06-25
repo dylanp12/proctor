@@ -1,0 +1,31 @@
+/* Proctor — restrained, technical, "integrity" theme.
+   Accent = a verified-green; the signed/compromised verdict is the brand motif. */
+:root {
+	--sl-color-accent-low: #052e16;
+	--sl-color-accent: #1f9d55;
+	--sl-color-accent-high: #86efac;
+	--sl-font-system-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Dark by default reads "tool/terminal"; keep the light theme clean too. */
+:root[data-theme='dark'] {
+	--sl-color-bg: #0a0e0c;
+	--sl-color-bg-nav: #0c1310;
+}
+
+/* Inline code + the verdict motif: subtle mono emphasis. */
+.sl-markdown-content code:not(pre code) {
+	font-family: var(--sl-font-system-mono);
+	font-size: 0.9em;
+}
+
+/* A small status pill used in docs/landing for clean/compromised verdicts. */
+.verdict {
+	font-family: var(--sl-font-system-mono);
+	font-size: 0.85em;
+	padding: 0.1rem 0.45rem;
+	border-radius: 0.3rem;
+	border: 1px solid currentColor;
+}
+.verdict-clean { color: var(--sl-color-accent-high); }
+.verdict-compromised { color: #fca5a5; }
