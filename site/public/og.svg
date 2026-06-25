@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="ui-monospace, 'JetBrains Mono', monospace">
+  <rect width="1200" height="630" fill="#0a0f0e"/>
+  <rect x="24" y="24" width="1152" height="582" rx="18" fill="none" stroke="#1f2a27" stroke-width="2"/>
+  <text x="72" y="104" font-size="34" font-weight="700" fill="#e8edeb">proctor<tspan fill="#46d6a8">_</tspan></text>
+  <text x="72" y="240" font-family="'Space Grotesk', system-ui, sans-serif" font-size="68" font-weight="700" fill="#e8edeb">The leaderboard says it passed.</text>
+  <text x="72" y="320" font-family="'Space Grotesk', system-ui, sans-serif" font-size="68" font-weight="700" fill="#46d6a8">Prove it.</text>
+  <g font-size="27">
+    <rect x="72" y="392" width="1056" height="58" rx="10" fill="#120f0e" stroke="#7c2f29"/>
+    <text x="96" y="429" fill="#ff6a5a">agent  cat /oracle/answer.txt   →   No such file or directory   [ENOENT] ✗</text>
+    <rect x="72" y="462" width="1056" height="58" rx="10" fill="#08140f" stroke="#2a8268"/>
+    <text x="96" y="499" fill="#46d6a8">$ verify-bundle   →   signature valid · chain bound · env matched   ✓</text>
+  </g>
+  <text x="72" y="576" font-size="25" fill="#90a39d">proctorbench.dev — signed, verifiable integrity bundles for AI coding-agent benchmarks</text>
+</svg>
