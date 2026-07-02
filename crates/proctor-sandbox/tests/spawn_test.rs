@@ -46,8 +46,19 @@ fn true_exits_zero_with_full_event_sequence() {
     let out = run_sandboxed(&spec(session.path(), "true", 30), &invoker()).unwrap();
     assert_eq!(out.agent_exit, Some(0));
     assert!(!out.timed_out);
+    // `mounts_ready` is emitted before the pid1 fork and `agent_exit` last; the
+    // `pid1` (init parent) and `sandboxed` (pid1 child) events are concurrent —
+    // their arrival order is a scheduling race, so assert the set, not the order.
     let kinds: Vec<&str> = out.events.iter().map(|e| e.kind()).collect();
-    assert_eq!(kinds, ["mounts_ready", "pid1", "sandboxed", "agent_exit"]);
+    assert_eq!(kinds.first(), Some(&"mounts_ready"), "events: {kinds:?}");
+    assert_eq!(kinds.last(), Some(&"agent_exit"), "events: {kinds:?}");
+    let mut middle = kinds[1..kinds.len() - 1].to_vec();
+    middle.sort_unstable();
+    assert_eq!(
+        middle,
+        ["pid1", "sandboxed"],
+        "expected pid1 + sandboxed in any order: {kinds:?}"
+    );
 }
 
 #[test]
